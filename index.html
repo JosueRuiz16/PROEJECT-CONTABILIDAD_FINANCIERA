@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SisteCostos — Control de Producción</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════
+       DESKTOP TOPBAR (oculto en móvil)
+  ═══════════════════════════════════════ -->
+  <header class="topbar">
+    <div class="topbar-brand">
+      <div class="brand-icon">SC</div>
+      <span class="brand-name">SisteCostos</span>
+    </div>
+
+    <nav class="topbar-nav">
+      <a class="tnav active" href="#" onclick="showPage('dashboard'); return false;">Panel</a>
+      <a class="tnav" href="#" onclick="showPage('empresa'); return false;">Empresa</a>
+      <a class="tnav" href="#" onclick="showPage('inventario'); return false;">Inventario</a>
+      <a class="tnav" href="#" onclick="showPage('nomina'); return false;">Nómina</a>
+      <a class="tnav" href="#" onclick="showPage('cif'); return false;">CIF</a>
+      <a class="tnav" href="#" onclick="showPage('reporte'); return false;">Reporte</a>
+      <a class="tnav" href="#" onclick="showPage('flujo'); return false;">Flujo</a>
+    </nav>
+
+    <button class="btn-accent" onclick="showPage('reporte'); return false;">Generar reporte →</button>
+  </header>
+
+  <!-- ═══════════════════════════════════════
+       MAIN CONTENT
+  ═══════════════════════════════════════ -->
+  <main class="main">
+    <div class="page-content">
+
+      <!-- BREADCRUMB desktop -->
+      <div class="breadcrumb-bar">
+        <span class="breadcrumb-text" id="breadcrumb">Panel general</span>
+      </div>
+
+      <!-- ── DASHBOARD ── -->
+      <div class="page active" id="page-dashboard">
+        <div class="page-header">
+          <h1 class="page-title">Panel general</h1>
+          <p class="page-desc">Resumen del sistema de control del costo de producción</p>
+        </div>
+
+        <div class="alert-banner" id="dash-alert">
+          <span class="alert-dot"></span>
+          Configura la empresa primero para comenzar a registrar datos.
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card kpi-blue">
+            <div class="kpi-label">Material directo</div>
+            <div class="kpi-value" id="dash-md">C$ 0</div>
+            <div class="kpi-sub" id="dash-md-items">0 materiales</div>
+          </div>
+          <div class="kpi-card kpi-green">
+            <div class="kpi-label">Mano de obra directa</div>
+            <div class="kpi-value" id="dash-mod">C$ 0</div>
+            <div class="kpi-sub" id="dash-mod-items">0 trabajadores MOD</div>
+          </div>
+          <div class="kpi-card kpi-orange">
+            <div class="kpi-label">CIF acumulado</div>
+            <div class="kpi-value" id="dash-cif">C$ 0</div>
+            <div class="kpi-sub" id="dash-cif-items">0 conceptos</div>
+          </div>
+          <div class="kpi-card kpi-purple">
+            <div class="kpi-label">Costo total</div>
+            <div class="kpi-value" id="dash-total">C$ 0</div>
+            <div class="kpi-sub" id="dash-unit">Costo unit.: C$ 0</div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-head"><span class="card-title">Estado de módulos</span></div>
+            <div class="module-status-list">
+              <div class="module-status" id="status-empresa">
+                <div class="status-dot dot-pending"></div>
+                <div class="status-info">
+                  <div class="status-name">Empresa</div>
+                  <div class="status-detail" id="status-empresa-detail">Sin configurar</div>
+                </div>
+                <span class="status-badge badge-pending">Pendiente</span>
+              </div>
+              <div class="module-status" id="status-inv">
+                <div class="status-dot dot-pending"></div>
+                <div class="status-info">
+                  <div class="status-name">Inventario de materiales</div>
+                  <div class="status-detail" id="status-inv-detail">0 materiales registrados</div>
+                </div>
+                <span class="status-badge badge-pending">Pendiente</span>
+              </div>
+              <div class="module-status" id="status-nom">
+                <div class="status-dot dot-pending"></div>
+                <div class="status-info">
+                  <div class="status-name">Nómina de producción</div>
+                  <div class="status-detail" id="status-nom-detail">0 trabajadores registrados</div>
+                </div>
+                <span class="status-badge badge-pending">Pendiente</span>
+              </div>
+              <div class="module-status" id="status-cif">
+                <div class="status-dot dot-pending"></div>
+                <div class="status-info">
+                  <div class="status-name">CIF</div>
+                  <div class="status-detail" id="status-cif-detail">0 conceptos registrados</div>
+                </div>
+                <span class="status-badge badge-pending">Pendiente</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><span class="card-title">Ejemplo base — Muebles del Pacífico</span></div>
+            <p class="card-desc-text">El sistema incluye el caso guía de la asignatura. Puedes usarlo como referencia o cargar los datos de ejemplo.</p>
+            <div class="ejemplo-mini">
+              <div class="ej-row"><span>Material directo</span><strong>C$ 10,000</strong></div>
+              <div class="ej-row"><span>Mano de obra directa</span><strong>C$ 13,000</strong></div>
+              <div class="ej-row"><span>CIF</span><strong>C$ 16,000</strong></div>
+              <div class="ej-row total"><span>Costo total</span><strong>C$ 39,000</strong></div>
+              <div class="ej-row"><span>Costo unitario (100 sillas)</span><strong>C$ 390</strong></div>
+            </div>
+            <button class="btn-outline" onclick="cargarEjemplo()">Cargar datos de ejemplo</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── EMPRESA ── -->
+      <div class="page" id="page-empresa">
+        <div class="page-header">
+          <h1 class="page-title">Datos de la empresa</h1>
+          <p class="page-desc">Configura la información general de la empresa manufacturera</p>
+        </div>
+        <div class="card form-card">
+          <div class="card-head"><span class="card-title">Información general</span></div>
+          <div class="form-grid cols-2">
+            <div class="form-group"><label>Nombre de la empresa</label><input type="text" id="emp-nombre" placeholder="Ej: Muebles del Pacífico, S.A."></div>
+            <div class="form-group"><label>Giro / Actividad</label><input type="text" id="emp-giro" placeholder="Ej: Fabricación de muebles escolares"></div>
+            <div class="form-group"><label>Producto principal</label><input type="text" id="emp-producto" placeholder="Ej: Silla escolar"></div>
+            <div class="form-group"><label>Área productiva</label><input type="text" id="emp-area" placeholder="Ej: Taller de carpintería"></div>
+            <div class="form-group"><label>Período de costeo</label><input type="text" id="emp-periodo" placeholder="Ej: Enero 2025"></div>
+            <div class="form-group"><label>Unidades a producir</label><input type="number" id="emp-unidades" min="1" placeholder="100"></div>
+          </div>
+          <div class="form-group full" style="margin-top:14px;">
+            <label>Problema identificado</label>
+            <textarea id="emp-problema" rows="3" placeholder="Describe la dificultad que tiene la empresa para calcular costos de forma manual..."></textarea>
+          </div>
+          <div class="form-group full" style="margin-top:14px;">
+            <label>Objetivo del sistema</label>
+            <textarea id="emp-objetivo" rows="2" placeholder="¿Qué busca resolver el sistema propuesto?"></textarea>
+          </div>
+          <div class="form-actions"><button class="btn-primary" onclick="guardarEmpresa()">Guardar empresa</button></div>
+        </div>
+      </div>
+
+      <!-- ── INVENTARIO ── -->
+      <div class="page" id="page-inventario">
+        <div class="page-header">
+          <h1 class="page-title">Módulo de inventario</h1>
+          <p class="page-desc">Registro de materiales directos e indirectos — entradas, consumos y costos</p>
+        </div>
+        <div class="card form-card">
+          <div class="card-head"><span class="card-title">Registrar material</span></div>
+          <div class="form-grid cols-3">
+            <div class="form-group"><label>Código</label><input type="text" id="inv-codigo" placeholder="MD-001"></div>
+            <div class="form-group"><label>Nombre del material</label><input type="text" id="inv-nombre" placeholder="Ej: Madera de pino"></div>
+            <div class="form-group"><label>Tipo</label><select id="inv-tipo"><option value="Directo">Material directo</option><option value="Indirecto">Material indirecto</option></select></div>
+            <div class="form-group"><label>Unidad de medida</label><input type="text" id="inv-unidad" placeholder="tabla, kg, m..."></div>
+            <div class="form-group"><label>Cantidad disponible</label><input type="number" id="inv-disponible" min="0" step="any" placeholder="0"></div>
+            <div class="form-group"><label>Cantidad consumida</label><input type="number" id="inv-cantidad" min="0" step="any" placeholder="0"></div>
+            <div class="form-group"><label>Costo unitario (C$)</label><input type="number" id="inv-costounit" min="0" step="any" placeholder="0"></div>
+          </div>
+          <div class="form-actions"><button class="btn-primary" onclick="addMaterial()">+ Agregar material</button></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Materiales registrados</span>
+            <div class="kpi-mini-row">
+              <span class="kpi-mini kpi-mini-blue">MD: <strong id="inv-total-md-mini">C$ 0</strong></span>
+              <span class="kpi-mini kpi-mini-orange">MI: <strong id="inv-total-mi-mini">C$ 0</strong></span>
+            </div>
+          </div>
+          <div id="inv-table-wrap"><div class="empty-state"><div class="empty-icon">◫</div><div>No hay materiales registrados</div></div></div>
+        </div>
+        <div class="formula-card"><span class="formula-label">Fórmula</span><span class="formula-text">Costo total = Cantidad consumida × Costo unitario</span></div>
+      </div>
+
+      <!-- ── NÓMINA ── -->
+      <div class="page" id="page-nomina">
+        <div class="page-header">
+          <h1 class="page-title">Módulo de nómina</h1>
+          <p class="page-desc">Registro de trabajadores, clasificación de mano de obra directa e indirecta</p>
+        </div>
+        <div class="card form-card">
+          <div class="card-head"><span class="card-title">Registrar trabajador</span></div>
+          <div class="form-grid cols-3">
+            <div class="form-group"><label>Nombre completo</label><input type="text" id="nom-nombre" placeholder="Nombre del trabajador"></div>
+            <div class="form-group"><label>Cargo</label><input type="text" id="nom-cargo" placeholder="Operario, Supervisor..."></div>
+            <div class="form-group"><label>Área</label><input type="text" id="nom-area" placeholder="Producción, Bodega..."></div>
+            <div class="form-group"><label>Horas ordinarias</label><input type="number" id="nom-horas" min="0" placeholder="240"></div>
+            <div class="form-group"><label>Salario ordinario (C$)</label><input type="number" id="nom-salario" min="0" step="any" placeholder="0"></div>
+            <div class="form-group"><label>Horas extra</label><input type="number" id="nom-he" min="0" step="any" placeholder="0"></div>
+            <div class="form-group"><label>Valor por hora extra (C$)</label><input type="number" id="nom-valhe" min="0" step="any" placeholder="0"></div>
+            <div class="form-group"><label>INSS laboral (C$)</label><input type="number" id="nom-inss" min="0" step="any" placeholder="0"></div>
+            <div class="form-group"><label>IR (C$)</label><input type="number" id="nom-ir" min="0" step="any" placeholder="0"></div>
+            <div class="form-group"><label>Otras deducciones (C$)</label><input type="number" id="nom-otras" min="0" step="any" placeholder="0"></div>
+            <div class="form-group"><label>Clasificación contable</label><select id="nom-clasif"><option value="MOD">Mano de obra directa (MOD)</option><option value="MOI">Mano de obra indirecta (MOI)</option><option value="Gasto administrativo">Gasto administrativo</option><option value="Gasto de venta">Gasto de venta</option></select></div>
+          </div>
+          <div class="form-actions"><button class="btn-primary" onclick="addTrabajador()">+ Agregar trabajador</button></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Nómina registrada</span>
+            <div class="kpi-mini-row">
+              <span class="kpi-mini kpi-mini-green">MOD: <strong id="nom-total-mod-mini">C$ 0</strong></span>
+              <span class="kpi-mini kpi-mini-orange">MOI: <strong id="nom-total-moi-mini">C$ 0</strong></span>
+            </div>
+          </div>
+          <div id="nom-table-wrap"><div class="empty-state"><div class="empty-icon">◉</div><div>No hay trabajadores registrados</div></div></div>
+        </div>
+        <div class="formula-card"><span class="formula-label">Fórmula</span><span class="formula-text">Salario bruto = Salario ordinario + Pago de horas extra &nbsp;|&nbsp; Neto = Bruto − Deducciones</span></div>
+      </div>
+
+      <!-- ── CIF ── -->
+      <div class="page" id="page-cif">
+        <div class="page-header">
+          <h1 class="page-title">Módulo de CIF</h1>
+          <p class="page-desc">Costos Indirectos de Fabricación — materiales indirectos, MOI y otros costos</p>
+        </div>
+        <div class="info-banner">Los materiales indirectos del módulo de inventario y la MOI del módulo de nómina se integran automáticamente al calcular el reporte. Aquí registra los <strong>otros CIF</strong> adicionales.</div>
+        <div class="card form-card">
+          <div class="card-head"><span class="card-title">Registrar CIF adicional</span></div>
+          <div class="form-grid cols-3">
+            <div class="form-group"><label>Concepto CIF</label><input type="text" id="cif-concepto" placeholder="Ej: Energía eléctrica de planta"></div>
+            <div class="form-group"><label>Tipo de CIF</label><select id="cif-tipo"><option value="Material indirecto">Material indirecto</option><option value="Mano de obra indirecta">Mano de obra indirecta</option><option value="Otro CIF">Otro CIF</option></select></div>
+            <div class="form-group"><label>Comportamiento</label><select id="cif-comp"><option value="Fijo">Fijo</option><option value="Variable">Variable</option><option value="Mixto">Mixto</option></select></div>
+            <div class="form-group"><label>Monto (C$)</label><input type="number" id="cif-monto" min="0" step="any" placeholder="0"></div>
+            <div class="form-group"><label>Área relacionada</label><input type="text" id="cif-area" placeholder="Producción, Fábrica..."></div>
+            <div class="form-group"><label>Observación</label><input type="text" id="cif-obs" placeholder="Breve descripción..."></div>
+          </div>
+          <div class="form-actions"><button class="btn-primary" onclick="addCIF()">+ Agregar CIF</button></div>
+        </div>
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">CIF registrados</span>
+            <span class="kpi-mini kpi-mini-orange">Total: <strong id="cif-total-mini">C$ 0</strong></span>
+          </div>
+          <div id="cif-table-wrap"><div class="empty-state"><div class="empty-icon">◈</div><div>No hay CIF adicionales registrados</div></div></div>
+        </div>
+        <div class="formula-card"><span class="formula-label">Fórmula</span><span class="formula-text">Total CIF = Materiales indirectos + Mano de obra indirecta + Otros CIF</span></div>
+      </div>
+
+      <!-- ── REPORTE ── -->
+      <div class="page" id="page-reporte">
+        <div class="page-header">
+          <h1 class="page-title">Reporte de costo de producción</h1>
+          <p class="page-desc">Integración de los tres elementos del costo — MD, MOD y CIF</p>
+        </div>
+        <div class="card form-card" style="margin-bottom:1.5rem;">
+          <div class="card-head"><span class="card-title">Configuración del reporte</span></div>
+          <div class="form-grid cols-3">
+            <div class="form-group"><label>Período</label><input type="text" id="rep-periodo" placeholder="Ej: Enero 2025"></div>
+            <div class="form-group"><label>Unidades producidas</label><input type="number" id="rep-unidades" min="1" placeholder="100"></div>
+          </div>
+          <div class="form-actions"><button class="btn-primary" onclick="generarReporte()">Generar reporte completo</button></div>
+        </div>
+        <div id="reporte-output">
+          <div class="empty-state card"><div class="empty-icon">◐</div><div>Completa los módulos y haz clic en "Generar reporte"</div></div>
+        </div>
+      </div>
+
+      <!-- ── FLUJO ── -->
+      <div class="page" id="page-flujo">
+        <div class="page-header">
+          <h1 class="page-title">Flujo de información del sistema</h1>
+          <p class="page-desc">Cómo los datos de cada módulo alimentan el reporte final de costos</p>
+        </div>
+        <div class="card">
+          <div class="flujo-container">
+            <div class="flujo-column">
+              <div class="flujo-header fl-blue">ENTRADAS</div>
+              <div class="flujo-box fl-blue-box">
+                <div class="flujo-title">Inventario</div>
+                <ul class="flujo-list"><li>Materiales directos</li><li>Materiales indirectos</li><li>Cantidades consumidas</li><li>Costos unitarios</li></ul>
+              </div>
+              <div class="flujo-box fl-blue-box" style="margin-top:1rem;">
+                <div class="flujo-title">Nómina</div>
+                <ul class="flujo-list"><li>Trabajadores MOD</li><li>Trabajadores MOI</li><li>Horas ordinarias/extra</li><li>Deducciones INSS, IR</li></ul>
+              </div>
+            </div>
+            <div class="flujo-arrow-col"><div class="flujo-arrow-big">→</div></div>
+            <div class="flujo-column">
+              <div class="flujo-header fl-orange">PROCESAMIENTO</div>
+              <div class="flujo-box fl-orange-box">
+                <div class="flujo-title">Clasificación de costos</div>
+                <ul class="flujo-list"><li>MD → costo directo</li><li>MI → acumula en CIF</li><li>MOD → costo directo</li><li>MOI → acumula en CIF</li></ul>
+              </div>
+              <div class="flujo-box fl-orange-box" style="margin-top:1rem;">
+                <div class="flujo-title">Módulo CIF</div>
+                <ul class="flujo-list"><li>+ Energía de planta</li><li>+ Depreciación</li><li>+ Mantenimiento</li><li>+ Alquiler fábrica</li></ul>
+              </div>
+            </div>
+            <div class="flujo-arrow-col"><div class="flujo-arrow-big">→</div></div>
+            <div class="flujo-column">
+              <div class="flujo-header fl-purple">SALIDA</div>
+              <div class="flujo-box fl-purple-box">
+                <div class="flujo-title">Reporte de costos</div>
+                <ul class="flujo-list"><li>Total MD</li><li>Total MOD</li><li>Total CIF</li><li>Costo total</li><li>Costo unitario</li></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:1.5rem;">
+          <div class="card-head"><span class="card-title">Clasificación de costos — referencia</span></div>
+          <div class="clasif-grid">
+            <div class="clasif-col"><div class="clasif-header ch-blue">Material directo (MD)</div><p class="clasif-desc">Forma parte principal del producto. Se identifica fácilmente con cada unidad producida. Ejemplo: madera en una silla.</p><div class="clasif-tag">→ Va directamente al costo de producción</div></div>
+            <div class="clasif-col"><div class="clasif-header ch-green">Mano de obra directa (MOD)</div><p class="clasif-desc">Trabajadores que transforman el material en producto terminado. Ejemplo: operario de carpintería.</p><div class="clasif-tag">→ Va directamente al costo de producción</div></div>
+            <div class="clasif-col"><div class="clasif-header ch-orange">CIF — Costos indirectos</div><p class="clasif-desc">Todos los costos necesarios para fabricar que no se identifican directamente con cada unidad: MOI, mat. indirecto, energía, depreciación, etc.</p><div class="clasif-tag">→ Se acumulan y asignan al costo total</div></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:1.5rem;">
+          <div class="card-head"><span class="card-title">Fórmulas del sistema</span></div>
+          <div class="formula-list">
+            <div class="formula-item"><span class="formula-num">1</span><div><div class="formula-name">Costo total de material</div><div class="formula-eq">Costo total = Cantidad consumida × Costo unitario</div></div></div>
+            <div class="formula-item"><span class="formula-num">2</span><div><div class="formula-name">Salario bruto</div><div class="formula-eq">Salario bruto = Salario ordinario + Pago de horas extra</div></div></div>
+            <div class="formula-item"><span class="formula-num">3</span><div><div class="formula-name">Salario neto</div><div class="formula-eq">Salario neto = Salario bruto − (INSS + IR + Otras deducciones)</div></div></div>
+            <div class="formula-item"><span class="formula-num">4</span><div><div class="formula-name">Total CIF</div><div class="formula-eq">Total CIF = Materiales indirectos + MOI + Otros CIF</div></div></div>
+            <div class="formula-item"><span class="formula-num">5</span><div><div class="formula-name">Costo total de producción</div><div class="formula-eq">Costo total = Material directo + MOD + CIF</div></div></div>
+            <div class="formula-item"><span class="formula-num">6</span><div><div class="formula-name">Costo unitario de producción</div><div class="formula-eq">Costo unitario = Costo total de producción ÷ Unidades producidas</div></div></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /page-content -->
+  </main>
+
+  <!-- ═══════════════════════════════════════
+       MOBILE BOTTOM NAV (oculto en desktop)
+  ═══════════════════════════════════════ -->
+  <nav class="bottom-nav">
+    <a class="bnav active" href="#" onclick="showPage('dashboard'); return false;">
+      <span class="bnav-icon">⬡</span>
+      <span class="bnav-label">Panel</span>
+    </a>
+    <a class="bnav" href="#" onclick="showPage('empresa'); return false;">
+      <span class="bnav-icon">◎</span>
+      <span class="bnav-label">Empresa</span>
+    </a>
+    <a class="bnav" href="#" onclick="showPage('inventario'); return false;">
+      <span class="bnav-icon">◫</span>
+      <span class="bnav-label">Inventario</span>
+    </a>
+    <a class="bnav" href="#" onclick="showPage('nomina'); return false;">
+      <span class="bnav-icon">◉</span>
+      <span class="bnav-label">Nómina</span>
+    </a>
+    <a class="bnav" href="#" onclick="showPage('cif'); return false;">
+      <span class="bnav-icon">◈</span>
+      <span class="bnav-label">CIF</span>
+    </a>
+    <a class="bnav" href="#" onclick="showPage('reporte'); return false;">
+      <span class="bnav-icon">◐</span>
+      <span class="bnav-label">Reporte</span>
+    </a>
+    <a class="bnav" href="#" onclick="showPage('flujo'); return false;">
+      <span class="bnav-icon">◁</span>
+      <span class="bnav-label">Flujo</span>
+    </a>
+  </nav>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
