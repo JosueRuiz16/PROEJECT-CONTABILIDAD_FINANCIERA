@@ -251,46 +251,96 @@ function renderInventario() {
   document.getElementById('inv-total-mi-mini').textContent = fmt(mi);
 
   if (state.materiales.length === 0) {
-    wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">◫</div><div>No hay materiales registrados</div></div>';
+    wrap.innerHTML = '<div class="empty-state"><span class="empty-icon">◫</span>No hay materiales registrados</div>';
     return;
   }
 
-  const rows = state.materiales.map(m => `
-    <tr>
-      <td>${m.codigo || '—'}</td>
-      <td>${m.nombre}</td>
-      <td><span class="pill ${m.tipo === 'Directo' ? 'pill-blue' : 'pill-orange'}">${m.tipo}</span></td>
-      <td>${fmtNum(m.disponible)} ${m.unidad}</td>
-      <td>${fmtNum(m.cantidad)} ${m.unidad}</td>
-      <td class="num">${fmt(m.costoUnit)}</td>
-      <td class="num"><strong>${fmt(m.total)}</strong></td>
-      <td><button class="btn-danger" onclick="delMaterial(${m.id})" title="Eliminar">✕</button></td>
-    </tr>
-  `).join('');
+  const rows = state.materiales.map(m => {
+    const lotes    = m.pepsLotes || [];
+    const pepsCalc = lotes.length > 0 ? calcPeps(lotes) : null;
 
-  const totalMD = state.materiales.filter(m => m.tipo === 'Directo').reduce((a, m) => a + m.total, 0);
+    // Tabla PEPS
+    const pepsRows = pepsCalc ? pepsCalc.rows.map(r => `
+      <tr>
+        <td>${r.fecha}</td>
+        <td><span class="${r.clase}">${r.tipo}</span></td>
+        <td class="num">${fmtNum(r.cant)} ${m.unidad}</td>
+        <td class="num">${fmt(r.costo)}</td>
+        <td class="num">${fmt(r.total)}</td>
+      </tr>
+    `).join('') : '';
+
+    const pepsPanel = `
+      <div class="peps-panel" id="peps-${m.id}">
+        <div class="peps-panel-title">Tarjeta PEPS — ${m.nombre}</div>
+        <div class="peps-form form-grid cols-3" style="margin-bottom:14px;">
+          <div class="form-group"><label>Fecha</label><input type="date" id="peps-fecha-${m.id}"></div>
+          <div class="form-group"><label>Tipo</label><select id="peps-tipo-${m.id}"><option value="Entrada">Entrada</option><option value="Salida">Salida</option></select></div>
+          <div class="form-group"><label>Cantidad</label><input type="number" id="peps-cant-${m.id}" min="0" step="any" placeholder="0"></div>
+          <div class="form-group"><label>Costo unitario (C$)</label><input type="number" id="peps-costo-${m.id}" min="0" step="any" placeholder="0"></div>
+        </div>
+        <button class="btn-primary" style="font-size:12px; padding:7px 14px; margin-bottom:14px;" onclick="addLotePeps(${m.id})">+ Agregar lote</button>
+        ${lotes.length > 0 ? `
+          <div class="peps-table-wrap">
+            <table>
+              <thead><tr><th>Fecha</th><th>Tipo</th><th class="num">Cantidad</th><th class="num">Costo unit.</th><th class="num">Total</th></tr></thead>
+              <tbody>
+                ${pepsRows}
+                <tr class="total-row">
+                  <td colspan="2">Saldo en existencia</td>
+                  <td class="num peps-saldo">${fmtNum(pepsCalc.saldoCant)} ${m.unidad}</td>
+                  <td></td>
+                  <td class="num peps-saldo">${fmt(pepsCalc.saldoCosto)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="peps-result">
+            <span class="peps-result-label">Costo material usado (PEPS)</span>
+            <span class="peps-result-value">${fmt(pepsCalc.costoUsado)}</span>
+          </div>
+        ` : '<div style="font-size:12px; color:var(--text3); padding:8px 0;">Agrega entradas y salidas para ver el kardex PEPS.</div>'}
+      </div>
+    `;
+
+    return `
+      <tr>
+        <td>${m.codigo || '—'}</td>
+        <td>${m.nombre}</td>
+        <td><span class="pill ${m.tipo === 'Directo' ? 'pill-blue' : 'pill-orange'}">${m.tipo}</span></td>
+        <td>${fmtNum(m.disponible)} ${m.unidad}</td>
+        <td>${fmtNum(m.cantidad)} ${m.unidad}</td>
+        <td class="num">${fmt(m.costoUnit)}</td>
+        <td class="num"><strong>${fmt(m.total)}</strong></td>
+        <td>
+          <button class="peps-toggle" onclick="togglePeps(${m.id})">PEPS</button>
+        </td>
+        <td><button class="btn-danger" onclick="delMaterial(${m.id})" title="Eliminar">✕</button></td>
+      </tr>
+      <tr>
+        <td colspan="9" style="padding:0; border-bottom: 1px solid var(--border);">
+          ${pepsPanel}
+        </td>
+      </tr>
+    `;
+  }).join('');
 
   wrap.innerHTML = `
     <div class="table-responsive">
       <table>
         <thead>
           <tr>
-            <th>Código</th>
-            <th>Material</th>
-            <th>Tipo</th>
-            <th>Disponible</th>
-            <th>Consumido</th>
-            <th class="num">Costo unit.</th>
-            <th class="num">Costo total</th>
-            <th></th>
+            <th>Código</th><th>Material</th><th>Tipo</th>
+            <th>Disponible</th><th>Consumido</th>
+            <th class="num">Costo unit.</th><th class="num">Costo total</th>
+            <th>PEPS</th><th></th>
           </tr>
         </thead>
         <tbody>
           ${rows}
           <tr class="total-row">
             <td colspan="6">Total material directo consumido</td>
-            <td class="num">${fmt(totalMD)}</td>
-            <td></td>
+            <td class="num">${fmt(md)}</td><td></td><td></td>
           </tr>
         </tbody>
       </table>
@@ -762,3 +812,89 @@ document.addEventListener('DOMContentLoaded', () => {
   showPage('dashboard');
   updateDashboard();
 });
+
+// ── PEPS ──
+function togglePeps(id) {
+  const panel = document.getElementById('peps-' + id);
+  if (!panel) return;
+  panel.classList.toggle('open');
+}
+
+function addLotePeps(matId) {
+  const fecha   = document.getElementById('peps-fecha-' + matId).value.trim();
+  const tipo    = document.getElementById('peps-tipo-' + matId).value;
+  const cant    = parseFloat(document.getElementById('peps-cant-' + matId).value) || 0;
+  const costo   = parseFloat(document.getElementById('peps-costo-' + matId).value) || 0;
+
+  if (!fecha || cant <= 0) { toast('Completa fecha y cantidad.', 'warn'); return; }
+
+  const mat = state.materiales.find(m => m.id === matId);
+  if (!mat) return;
+  if (!mat.pepsLotes) mat.pepsLotes = [];
+  mat.pepsLotes.push({ id: Date.now(), fecha, tipo, cant, costo });
+
+  document.getElementById('peps-fecha-' + matId).value = '';
+  document.getElementById('peps-cant-' + matId).value  = '';
+  document.getElementById('peps-costo-' + matId).value = '';
+
+  saveState();
+  renderInventario();
+  // reopen panel
+  setTimeout(() => {
+    const p = document.getElementById('peps-' + matId);
+    if (p) p.classList.add('open');
+  }, 10);
+  toast('Lote PEPS registrado.');
+}
+
+function delLotePeps(matId, loteId) {
+  const mat = state.materiales.find(m => m.id === matId);
+  if (!mat || !mat.pepsLotes) return;
+  mat.pepsLotes = mat.pepsLotes.filter(l => l.id !== loteId);
+  saveState();
+  renderInventario();
+  setTimeout(() => {
+    const p = document.getElementById('peps-' + matId);
+    if (p) p.classList.add('open');
+  }, 10);
+}
+
+function calcPeps(lotes) {
+  // Calcula tabla kardex PEPS: entradas primero salen primero
+  // Retorna { rows, costoUsado, saldoCant, saldoCosto }
+  const entradas = lotes.filter(l => l.tipo === 'Entrada').sort((a,b) => a.fecha.localeCompare(b.fecha));
+  const salidas  = lotes.filter(l => l.tipo === 'Salida').sort((a,b) => a.fecha.localeCompare(b.fecha));
+
+  // Cola PEPS
+  let cola = entradas.map(e => ({ fecha: e.fecha, cant: e.cant, costo: e.costo, restante: e.cant }));
+  let rows = [];
+  let costoUsado = 0;
+
+  // Registrar entradas
+  entradas.forEach(e => {
+    rows.push({ fecha: e.fecha, tipo: 'Entrada', cant: e.cant, costo: e.costo, total: e.cant * e.costo, clase: 'peps-lote-entrada' });
+  });
+
+  // Procesar salidas PEPS
+  salidas.forEach(s => {
+    let restaSalida = s.cant;
+    let costoSalida = 0;
+    for (let lote of cola) {
+      if (restaSalida <= 0) break;
+      const usar = Math.min(lote.restante, restaSalida);
+      costoSalida += usar * lote.costo;
+      costoUsado  += usar * lote.costo;
+      lote.restante -= usar;
+      restaSalida   -= usar;
+    }
+    cola = cola.filter(l => l.restante > 0);
+    rows.push({ fecha: s.fecha, tipo: 'Salida', cant: s.cant, costo: costoSalida / s.cant, total: costoSalida, clase: 'peps-lote-salida' });
+  });
+
+  // Saldo
+  const saldoCant  = cola.reduce((a, l) => a + l.restante, 0);
+  const saldoCosto = cola.reduce((a, l) => a + l.restante * l.costo, 0);
+  rows.sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+  return { rows, costoUsado, saldoCant, saldoCosto };
+}
