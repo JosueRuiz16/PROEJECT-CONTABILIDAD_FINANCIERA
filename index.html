@@ -11,53 +11,54 @@
 <body>
 
   <!-- ══════════════ LOGIN ══════════════ -->
-  <div class="login-overlay" id="login-overlay">
-    <div class="login-box">
-      <div class="login-brand">
-        <div class="login-icon">UNI</div>
-        <div>
-          <div class="login-title">Login</div>
-          <div class="login-subtitle">Control de Producción</div>
-        </div>
+<div class="login-overlay" id="login-overlay">
+  <div class="login-box">
+    <div class="login-brand">
+      <img src="uni2.png" alt="Logo" class="login-icon-img" style="width:80px;height:48px;">
+      
+      <div>
+        <div class="login-title">Login</div>
+        <div class="login-subtitle">Control de Producción</div>
       </div>
-
-      <div class="login-divider"></div>
-
-      <div class="login-form">
-        <div class="login-eyebrow">Acceso al sistema</div>
-
-        <div class="login-field">
-          <label>Usuario</label>
-          <input type="text" id="login-user" placeholder="usuario" autocomplete="off" onkeydown="if(event.key==='Enter') doLogin()">
-        </div>
-        <div class="login-field">
-          <label>Contraseña</label>
-          <div class="login-pass-wrap">
-            <input type="password" id="login-pass" placeholder="••••••" onkeydown="if(event.key==='Enter') doLogin()">
-            <button class="login-eye" onclick="togglePass()" id="eye-btn" title="Mostrar">👁</button>
-          </div>
-        </div>
-
-        <div class="login-error" id="login-error"></div>
-
-        <button class="login-btn" onclick="doLogin()">Ingresar →</button>
-      </div>
-
-      <div class="login-footer">Contabilidad de Costos</div>
     </div>
+
+    <div class="login-divider"></div>
+
+    <div class="login-form">
+      <div class="login-eyebrow">Acceso al sistema</div>
+
+      <div class="login-field">
+        <label>(Usuario)</label>
+        <input type="text" id="login-user" placeholder="usuario" autocomplete="off" onkeydown="if(event.key==='Enter') doLogin()">
+      </div>
+      <div class="login-field">
+        <label>Contraseña</label>
+        <div class="login-pass-wrap">
+          <input type="password" id="login-pass" placeholder="••••••" onkeydown="if(event.key==='Enter') doLogin()">
+          <button class="login-eye" onclick="togglePass()" id="eye-btn" title="Mostrar">👁</button>
+        </div>
+      </div>
+
+      <div class="login-error" id="login-error"></div>
+
+      <button class="login-btn" onclick="doLogin()">Ingresar </button>
+    </div>
+
+    <div class="login-footer">Contabilidad de Costos</div>
   </div>
+</div>
 
   <!-- ══════════════ APP ══════════════ -->
   <div class="app-shell" id="app-shell" style="display:none;">
 
   <header class="topbar">
-    <div class="topbar-brand">
-      <div class="brand-icon">SC</div>
-      <div>
-        <div class="brand-name">SisteCostos</div>
-        <div class="brand-welcome" id="brand-welcome">Bienvenido</div>
-      </div>
+  <div class="topbar-brand">
+    <img src="uni2.png" alt="Logo" class="brand-icon-img" style="width:80px;height:48px;">
+    <div>
+      <div class="brand-name">Sistema de Costos :)</div>
+      <div class="brand-welcome" id="brand-welcome">Bienvenido</div>
     </div>
+</div>
     <nav class="topbar-nav">
       <a class="tnav active" href="#" onclick="showPage('dashboard'); return false;">Panel</a>
       <a class="tnav" href="#" onclick="showPage('empresa'); return false;">Empresa</a>
