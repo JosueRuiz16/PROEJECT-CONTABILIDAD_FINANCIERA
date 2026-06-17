@@ -10,14 +10,68 @@
 </head>
 <body>
 
+  <!-- ══════════════ LOGIN ══════════════ -->
+  <div class="login-overlay" id="login-overlay">
+    <div class="login-box">
+      <div class="login-brand">
+        <div class="login-icon">UNI</div>
+        <div>
+          <div class="login-title">Login</div>
+          <div class="login-subtitle">Control de Producción</div>
+        </div>
+      </div>
+
+      <div class="login-divider"></div>
+
+      <div class="login-form">
+        <div class="login-eyebrow">Acceso al sistema</div>
+
+        <div class="login-field">
+          <label>Usuario</label>
+          <input type="text" id="login-user" placeholder="usuario" autocomplete="off" onkeydown="if(event.key==='Enter') doLogin()">
+        </div>
+        <div class="login-field">
+          <label>Contraseña</label>
+          <div class="login-pass-wrap">
+            <input type="password" id="login-pass" placeholder="••••••" onkeydown="if(event.key==='Enter') doLogin()">
+            <button class="login-eye" onclick="togglePass()" id="eye-btn" title="Mostrar">👁</button>
+          </div>
+        </div>
+
+        <div class="login-error" id="login-error"></div>
+
+        <button class="login-btn" onclick="doLogin()">Ingresar →</button>
+      </div>
+
+      <div class="login-footer">Contabilidad de Costos</div>
+    </div>
+  </div>
+
+  <!-- ══════════════ APP ══════════════ -->
+  <div class="app-shell" id="app-shell" style="display:none;">
+
   <header class="topbar">
     <div class="topbar-brand">
       <div class="brand-icon">SC</div>
-      <span class="brand-name">SisteCostos</span>
+      <div>
+        <div class="brand-name">SisteCostos</div>
+        <div class="brand-welcome" id="brand-welcome">Bienvenido</div>
+      </div>
     </div>
     <nav class="topbar-nav">
       <a class="tnav active" href="#" onclick="showPage('dashboard'); return false;">Panel</a>
       <a class="tnav" href="#" onclick="showPage('empresa'); return false;">Empresa</a>
+      <a class="tnav" href="#" onclick="showPage('inventario'); return false;">Inventario</a>
+      <a class="tnav" href="#" onclick="showPage('nomina'); return false;">Nómina</a>
+      <a class="tnav" href="#" onclick="showPage('cif'); return false;">CIF</a>
+      <a class="tnav" href="#" onclick="showPage('reporte'); return false;">Reporte</a>
+      <a class="tnav" href="#" onclick="showPage('flujo'); return false;">Flujo</a>
+    </nav>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <button class="btn-accent" onclick="showPage('reporte'); return false;">Generar reporte →</button>
+      <button class="btn-logout" onclick="doLogout()" title="Cerrar sesión">⎋</button>
+    </div>
+  </header>
       <a class="tnav" href="#" onclick="showPage('inventario'); return false;">Inventario</a>
       <a class="tnav" href="#" onclick="showPage('nomina'); return false;">Nómina</a>
       <a class="tnav" href="#" onclick="showPage('cif'); return false;">CIF</a>
@@ -178,9 +232,12 @@
         <div class="card">
           <div class="card-head">
             <span class="card-title">Materiales registrados</span>
-            <div class="kpi-mini-row">
-              <span class="kpi-mini kpi-mini-blue">MD: <strong id="inv-total-md-mini">C$ 0</strong></span>
-              <span class="kpi-mini kpi-mini-orange">MI: <strong id="inv-total-mi-mini">C$ 0</strong></span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <div class="kpi-mini-row">
+                <span class="kpi-mini kpi-mini-blue">MD: <strong id="inv-total-md-mini">C$ 0</strong></span>
+                <span class="kpi-mini kpi-mini-orange">MI: <strong id="inv-total-mi-mini">C$ 0</strong></span>
+              </div>
+              <button class="btn-excel" onclick="exportInventario()"><span class="btn-excel-icon">⬇</span> Excel</button>
             </div>
           </div>
           <div id="inv-table-wrap"><div class="empty-state"><span class="empty-icon">◫</span>No hay materiales registrados</div></div>
@@ -228,9 +285,12 @@
         <div class="card">
           <div class="card-head">
             <span class="card-title">Nómina registrada</span>
-            <div class="kpi-mini-row">
-              <span class="kpi-mini kpi-mini-green">MOD: <strong id="nom-total-mod-mini">C$ 0</strong></span>
-              <span class="kpi-mini kpi-mini-orange">MOI: <strong id="nom-total-moi-mini">C$ 0</strong></span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <div class="kpi-mini-row">
+                <span class="kpi-mini kpi-mini-green">MOD: <strong id="nom-total-mod-mini">C$ 0</strong></span>
+                <span class="kpi-mini kpi-mini-orange">MOI: <strong id="nom-total-moi-mini">C$ 0</strong></span>
+              </div>
+              <button class="btn-excel" onclick="exportNomina()"><span class="btn-excel-icon">⬇</span> Excel</button>
             </div>
           </div>
           <div id="nom-table-wrap"><div class="empty-state"><span class="empty-icon">◉</span>No hay trabajadores registrados</div></div>
@@ -263,7 +323,10 @@
         <div class="card">
           <div class="card-head">
             <span class="card-title">CIF registrados</span>
-            <span class="kpi-mini kpi-mini-orange">Total: <strong id="cif-total-mini">C$ 0</strong></span>
+            <div style="display:flex;gap:8px;align-items:center;">
+              <span class="kpi-mini kpi-mini-orange">Total: <strong id="cif-total-mini">C$ 0</strong></span>
+              <button class="btn-excel" onclick="exportCIF()"><span class="btn-excel-icon">⬇</span> Excel</button>
+            </div>
           </div>
           <div id="cif-table-wrap"><div class="empty-state"><span class="empty-icon">◈</span>No hay CIF adicionales registrados</div></div>
         </div>
@@ -285,7 +348,10 @@
               <div class="form-group"><label>Unidades producidas</label><input type="number" id="rep-unidades" min="1" placeholder="100"></div>
             </div>
           </div>
-          <div class="form-actions"><button class="btn-primary" onclick="generarReporte()">Generar reporte completo</button></div>
+          <div class="form-actions">
+            <button class="btn-primary" onclick="generarReporte()">Generar reporte completo</button>
+            <button class="btn-excel" onclick="exportReporte()"><span class="btn-excel-icon">⬇</span> Exportar todo a Excel</button>
+          </div>
         </div>
         <div id="reporte-output">
           <div class="empty-state card"><span class="empty-icon">◐</span>Completa los módulos y haz clic en "Generar reporte"</div>
@@ -369,6 +435,9 @@
   </nav>
 
   <div class="toast" id="toast"></div>
+
+  </div><!-- /app-shell -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -3,6 +3,50 @@
    Lógica completa del sistema
    ============================================ */
 
+
+// ── USUARIOS ──
+const USERS = {
+  admin:     { pass: "12345",  nombre: "Josue" },
+  itzy:      { pass: "itzy1",  nombre: "Itzy" },
+  alejandra: { pass: "ale1",   nombre: "Alejandra" },
+  david:     { pass: "david1", nombre: "David" },
+  dulce:     { pass: "dulce1", nombre: "Dulce" },
+};
+
+function doLogin() {
+  const user = document.getElementById("login-user").value.trim().toLowerCase();
+  const pass = document.getElementById("login-pass").value;
+  const err  = document.getElementById("login-error");
+  if (!USERS[user] || USERS[user].pass !== pass) {
+    err.textContent = "Usuario o contraseña incorrectos.";
+    document.getElementById("login-pass").value = "";
+    document.getElementById("login-pass").focus();
+    return;
+  }
+  err.textContent = "";
+  const nombre = USERS[user].nombre;
+  document.getElementById("brand-welcome").textContent = "Bienvenido " + nombre;
+  document.getElementById("login-overlay").style.display = "none";
+  document.getElementById("app-shell").style.display = "block";
+  sessionStorage.setItem("sc_user", user);
+  sessionStorage.setItem("sc_nombre", nombre);
+}
+
+function doLogout() {
+  sessionStorage.removeItem("sc_user");
+  sessionStorage.removeItem("sc_nombre");
+  document.getElementById("app-shell").style.display = "none";
+  document.getElementById("login-overlay").style.display = "flex";
+  document.getElementById("login-user").value = "";
+  document.getElementById("login-pass").value = "";
+  document.getElementById("login-error").textContent = "";
+}
+
+function togglePass() {
+  const inp = document.getElementById("login-pass");
+  inp.type = inp.type === "password" ? "text" : "password";
+}
+
 // ── ESTADO GLOBAL ──
 const state = {
   empresa: null,
@@ -792,24 +836,34 @@ function cargarEjemplo() {
 }
 
 // ── INIT ──
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener("DOMContentLoaded", () => {
+  // Verificar sesión activa
+  const savedUser   = sessionStorage.getItem("sc_user");
+  const savedNombre = sessionStorage.getItem("sc_nombre");
+  if (savedUser && USERS[savedUser]) {
+    document.getElementById("brand-welcome").textContent = "Bienvenido " + savedNombre;
+    document.getElementById("login-overlay").style.display = "none";
+    document.getElementById("app-shell").style.display = "block";
+  } else {
+    document.getElementById("login-user").focus();
+  }
+
   loadState();
 
-  // Restaurar campos de empresa si hay datos guardados
   if (state.empresa) {
     const e = state.empresa;
-    ['nombre','giro','producto','area','periodo','unidades','problema','objetivo'].forEach(k => {
-      const el = document.getElementById('emp-' + k);
+    ["nombre","giro","producto","area","periodo","unidades","problema","objetivo"].forEach(k => {
+      const el = document.getElementById("emp-" + k);
       if (el && e[k]) el.value = e[k];
     });
-    if (e.periodo)  document.getElementById('rep-periodo').value  = e.periodo;
-    if (e.unidades) document.getElementById('rep-unidades').value = e.unidades;
+    if (e.periodo)  document.getElementById("rep-periodo").value  = e.periodo;
+    if (e.unidades) document.getElementById("rep-unidades").value = e.unidades;
   }
 
   renderInventario();
   renderNomina();
   renderCIF();
-  showPage('dashboard');
+  showPage("dashboard");
   updateDashboard();
 });
 
@@ -897,4 +951,214 @@ function calcPeps(lotes) {
   rows.sort((a, b) => a.fecha.localeCompare(b.fecha));
 
   return { rows, costoUsado, saldoCant, saldoCosto };
+}
+
+// ══════════════════════════════════════════
+// EXPORTACIÓN A EXCEL (SheetJS)
+// ══════════════════════════════════════════
+
+function xlsxNum(n) { return parseFloat(n) || 0; }
+
+// Estilos base reutilizables
+const XS = {
+  header: { font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 }, fill: { fgColor: { rgb: '1A2A1C' } }, alignment: { horizontal: 'center' }, border: { bottom: { style: 'thin', color: { rgb: '4ECB8D' } } } },
+  subheader: { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: '151C16' } }, alignment: { horizontal: 'left' } },
+  total: { font: { bold: true, sz: 11, color: { rgb: '4ECB8D' } }, fill: { fgColor: { rgb: '151C16' } } },
+  empresa: { font: { bold: true, sz: 13 }, fill: { fgColor: { rgb: '0C0F0D' } }, alignment: { horizontal: 'left' } },
+  num: { numFmt: '"C$"#,##0' },
+  numBold: { font: { bold: true }, numFmt: '"C$"#,##0' },
+};
+
+function applyStyles(ws, styleMap) {
+  Object.entries(styleMap).forEach(([cell, style]) => {
+    if (!ws[cell]) return;
+    ws[cell].s = style;
+  });
+}
+
+function setColWidths(ws, widths) {
+  ws['!cols'] = widths.map(w => ({ wch: w }));
+}
+
+// ── EXPORTAR INVENTARIO ──
+function exportInventario() {
+  if (state.materiales.length === 0) { toast('No hay materiales para exportar.', 'warn'); return; }
+  const empresa = state.empresa ? state.empresa.nombre : 'Empresa';
+
+  const wb = XLSX.utils.book_new();
+
+  // Hoja 1: Inventario general
+  const rows = [
+    [empresa],
+    ['MÓDULO DE INVENTARIO — MATERIALES'],
+    [],
+    ['Código', 'Material', 'Tipo', 'Unidad', 'Cant. disponible', 'Cant. consumida', 'Costo unitario', 'Costo total'],
+  ];
+  state.materiales.forEach(m => {
+    rows.push([m.codigo || '—', m.nombre, m.tipo, m.unidad, xlsxNum(m.disponible), xlsxNum(m.cantidad), xlsxNum(m.costoUnit), xlsxNum(m.total)]);
+  });
+  const md = state.materiales.filter(x => x.tipo === 'Directo').reduce((a, x) => a + x.total, 0);
+  const mi = state.materiales.filter(x => x.tipo === 'Indirecto').reduce((a, x) => a + x.total, 0);
+  rows.push([], ['', '', '', '', '', 'Total MD', '', xlsxNum(md)], ['', '', '', '', '', 'Total MI', '', xlsxNum(mi)], ['', '', '', '', '', 'TOTAL', '', xlsxNum(md + mi)]);
+
+  const ws1 = XLSX.utils.aoa_to_sheet(rows);
+  ws1['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:7} }, { s:{r:1,c:0}, e:{r:1,c:7} }];
+  setColWidths(ws1, [10, 28, 12, 10, 16, 16, 16, 14]);
+  XLSX.utils.book_append_sheet(wb, ws1, 'Inventario');
+
+  // Hoja 2: PEPS por material (solo los que tienen lotes)
+  const conPeps = state.materiales.filter(m => m.pepsLotes && m.pepsLotes.length > 0);
+  if (conPeps.length > 0) {
+    const rowsPeps = [['TARJETAS PEPS POR MATERIAL'], []];
+    conPeps.forEach(m => {
+      const calc = calcPeps(m.pepsLotes);
+      rowsPeps.push([`Material: ${m.nombre} (${m.codigo || '—'})`]);
+      rowsPeps.push(['Fecha', 'Tipo', 'Cantidad', 'Costo unit.', 'Total']);
+      calc.rows.forEach(r => rowsPeps.push([r.fecha, r.tipo, xlsxNum(r.cant), xlsxNum(r.costo), xlsxNum(r.total)]));
+      rowsPeps.push(['', 'Saldo existencia', xlsxNum(calc.saldoCant), '', xlsxNum(calc.saldoCosto)]);
+      rowsPeps.push(['', 'COSTO USADO (PEPS)', '', '', xlsxNum(calc.costoUsado)]);
+      rowsPeps.push([]);
+    });
+    const ws2 = XLSX.utils.aoa_to_sheet(rowsPeps);
+    setColWidths(ws2, [14, 18, 14, 14, 14]);
+    XLSX.utils.book_append_sheet(wb, ws2, 'PEPS');
+  }
+
+  XLSX.writeFile(wb, `Inventario_${empresa.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
+  toast('Inventario exportado a Excel.');
+}
+
+// ── EXPORTAR NÓMINA ──
+function exportNomina() {
+  if (state.trabajadores.length === 0) { toast('No hay trabajadores para exportar.', 'warn'); return; }
+  const empresa = state.empresa ? state.empresa.nombre : 'Empresa';
+
+  const wb = XLSX.utils.book_new();
+  const rows = [
+    [empresa],
+    ['MÓDULO DE NÓMINA — PLANILLA DE PRODUCCIÓN'],
+    [],
+    ['Trabajador', 'Cargo', 'Área', 'Horas ord.', 'Sal. ordinario', 'HE', 'Pago HE', 'Sal. bruto', 'INSS', 'IR', 'Otras ded.', 'Total ded.', 'Sal. neto', 'Clasificación'],
+  ];
+  state.trabajadores.forEach(t => {
+    rows.push([t.nombre, t.cargo, t.area, xlsxNum(t.horas), xlsxNum(t.salario), xlsxNum(t.he), xlsxNum(t.pagoHE), xlsxNum(t.bruto), xlsxNum(t.inss), xlsxNum(t.ir), xlsxNum(t.otras), xlsxNum(t.deducciones), xlsxNum(t.neto), t.clasif]);
+  });
+  const mod = state.trabajadores.filter(t => t.clasif === 'MOD').reduce((a, t) => a + t.bruto, 0);
+  const moi = state.trabajadores.filter(t => t.clasif === 'MOI').reduce((a, t) => a + t.bruto, 0);
+  rows.push([], ['', '', '', '', '', '', '', 'Total MOD (bruto)', '', '', '', '', '', xlsxNum(mod)], ['', '', '', '', '', '', '', 'Total MOI (bruto)', '', '', '', '', '', xlsxNum(moi)]);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:13} }, { s:{r:1,c:0}, e:{r:1,c:13} }];
+  setColWidths(ws, [22, 16, 14, 10, 14, 6, 10, 12, 10, 10, 12, 10, 12, 16]);
+  XLSX.utils.book_append_sheet(wb, ws, 'Nómina');
+
+  XLSX.writeFile(wb, `Nomina_${empresa.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
+  toast('Nómina exportada a Excel.');
+}
+
+// ── EXPORTAR CIF ──
+function exportCIF() {
+  const empresa = state.empresa ? state.empresa.nombre : 'Empresa';
+  const mi  = state.materiales.filter(m => m.tipo === 'Indirecto').reduce((a, m) => a + m.total, 0);
+  const moi = state.trabajadores.filter(t => t.clasif === 'MOI').reduce((a, t) => a + t.bruto, 0);
+
+  const wb = XLSX.utils.book_new();
+  const rows = [
+    [empresa],
+    ['MÓDULO DE CIF — COSTOS INDIRECTOS DE FABRICACIÓN'],
+    [],
+    ['Concepto', 'Tipo de CIF', 'Comportamiento', 'Área', 'Monto (C$)', 'Observación'],
+  ];
+
+  if (mi > 0) rows.push(['Materiales indirectos (inventario)', 'Material indirecto', 'Variable', 'Producción', xlsxNum(mi), 'Integrado desde módulo de inventario']);
+  if (moi > 0) rows.push(['Mano de obra indirecta (nómina)', 'MOI', 'Fijo', 'Producción', xlsxNum(moi), 'Integrado desde módulo de nómina']);
+  state.cifItems.forEach(c => rows.push([c.concepto, c.tipo, c.comp, c.area || '—', xlsxNum(c.monto), c.obs || '—']));
+
+  const total = mi + moi + state.cifItems.reduce((a, c) => a + c.monto, 0);
+  rows.push([], ['', '', '', 'TOTAL CIF', xlsxNum(total), '']);
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:5} }, { s:{r:1,c:0}, e:{r:1,c:5} }];
+  setColWidths(ws, [34, 22, 14, 16, 14, 28]);
+  XLSX.utils.book_append_sheet(wb, ws, 'CIF');
+
+  XLSX.writeFile(wb, `CIF_${empresa.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
+  toast('CIF exportado a Excel.');
+}
+
+// ── EXPORTAR REPORTE COMPLETO ──
+function exportReporte() {
+  const empresa  = state.empresa ? state.empresa.nombre : 'Empresa';
+  const producto = state.empresa ? state.empresa.producto : '';
+  const periodo  = document.getElementById('rep-periodo').value || (state.empresa ? state.empresa.periodo : '');
+  const unidades = parseInt(document.getElementById('rep-unidades').value) || parseInt(state.empresa?.unidades) || 0;
+
+  const md    = state.materiales.filter(m => m.tipo === 'Directo').reduce((a, m) => a + m.total, 0);
+  const mi    = state.materiales.filter(m => m.tipo === 'Indirecto').reduce((a, m) => a + m.total, 0);
+  const mod   = state.trabajadores.filter(t => t.clasif === 'MOD').reduce((a, t) => a + t.bruto, 0);
+  const moi   = state.trabajadores.filter(t => t.clasif === 'MOI').reduce((a, t) => a + t.bruto, 0);
+  const cifEx = state.cifItems.reduce((a, c) => a + c.monto, 0);
+  const totalCIF = mi + moi + cifEx;
+  const cTotal   = md + mod + totalCIF;
+  const cUnit    = unidades > 0 ? cTotal / unidades : 0;
+
+  const wb = XLSX.utils.book_new();
+
+  // ── Hoja 1: Resumen ejecutivo ──
+  const rowsRes = [
+    [empresa],
+    ['REPORTE DE COSTO DE PRODUCCIÓN'],
+    [`Producto: ${producto}  |  Período: ${periodo}  |  Unidades: ${unidades}`],
+    [],
+    ['ELEMENTO DEL COSTO', 'MONTO (C$)', '% DEL TOTAL'],
+    ['Material directo consumido', xlsxNum(md), cTotal > 0 ? (md/cTotal) : 0],
+    ['Mano de obra directa (MOD)', xlsxNum(mod), cTotal > 0 ? (mod/cTotal) : 0],
+    ['Costos indirectos de fabricación (CIF)', xlsxNum(totalCIF), cTotal > 0 ? (totalCIF/cTotal) : 0],
+    [],
+    ['COSTO TOTAL DE PRODUCCIÓN', xlsxNum(cTotal), 1],
+    [],
+    ['Unidades producidas', xlsxNum(unidades), ''],
+    ['COSTO UNITARIO', xlsxNum(cUnit), ''],
+    [],
+    ['Fórmula:', `MD (${fmtNum(md)}) + MOD (${fmtNum(mod)}) + CIF (${fmtNum(totalCIF)}) = C$ ${fmtNum(cTotal)}`, ''],
+  ];
+  const wsRes = XLSX.utils.aoa_to_sheet(rowsRes);
+  wsRes['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:2} }, { s:{r:1,c:0}, e:{r:1,c:2} }, { s:{r:2,c:0}, e:{r:2,c:2} }];
+  // Formato porcentaje en columna C
+  ['C6','C7','C8','C10'].forEach(cell => { if (wsRes[cell]) wsRes[cell].z = '0.0%'; });
+  setColWidths(wsRes, [38, 18, 14]);
+  XLSX.utils.book_append_sheet(wb, wsRes, 'Resumen');
+
+  // ── Hoja 2: Desglose CIF ──
+  const rowsCIF = [
+    ['DESGLOSE DE CIF'],
+    [],
+    ['Concepto', 'Tipo', 'Comportamiento', 'Monto'],
+  ];
+  if (mi > 0)  rowsCIF.push(['Materiales indirectos (inv.)', 'Mat. indirecto', 'Variable', xlsxNum(mi)]);
+  if (moi > 0) rowsCIF.push(['Mano de obra indirecta (nom.)', 'MOI', 'Fijo', xlsxNum(moi)]);
+  state.cifItems.forEach(c => rowsCIF.push([c.concepto, c.tipo, c.comp, xlsxNum(c.monto)]));
+  rowsCIF.push([], ['', '', 'TOTAL CIF', xlsxNum(totalCIF)]);
+  const wsCIF = XLSX.utils.aoa_to_sheet(rowsCIF);
+  setColWidths(wsCIF, [34, 22, 16, 14]);
+  XLSX.utils.book_append_sheet(wb, wsCIF, 'Desglose CIF');
+
+  // ── Hoja 3: Inventario ──
+  const rowsInv = [['INVENTARIO DE MATERIALES'], [], ['Código','Material','Tipo','Unidad','Cant. consumida','Costo unit.','Costo total']];
+  state.materiales.forEach(m => rowsInv.push([m.codigo||'—', m.nombre, m.tipo, m.unidad, xlsxNum(m.cantidad), xlsxNum(m.costoUnit), xlsxNum(m.total)]));
+  rowsInv.push([], ['','','','','Total MD','', xlsxNum(md)]);
+  const wsInv = XLSX.utils.aoa_to_sheet(rowsInv);
+  setColWidths(wsInv, [10,28,12,10,16,14,14]);
+  XLSX.utils.book_append_sheet(wb, wsInv, 'Inventario');
+
+  // ── Hoja 4: Nómina ──
+  const rowsNom = [['NÓMINA DE PRODUCCIÓN'], [], ['Trabajador','Cargo','Sal. bruto','Deducciones','Sal. neto','Clasificación']];
+  state.trabajadores.forEach(t => rowsNom.push([t.nombre, t.cargo, xlsxNum(t.bruto), xlsxNum(t.deducciones), xlsxNum(t.neto), t.clasif]));
+  rowsNom.push([], ['','Total MOD', xlsxNum(mod),'','',''], ['','Total MOI', xlsxNum(moi),'','','']);
+  const wsNom = XLSX.utils.aoa_to_sheet(rowsNom);
+  setColWidths(wsNom, [24,16,14,14,14,18]);
+  XLSX.utils.book_append_sheet(wb, wsNom, 'Nómina');
+
+  XLSX.writeFile(wb, `Reporte_Costos_${empresa.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
+  toast('Reporte completo exportado a Excel.');
 }
