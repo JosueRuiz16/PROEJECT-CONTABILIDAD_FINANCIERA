@@ -267,18 +267,28 @@
             <div class="form-section-title">Salario y horas</div>
             <div class="form-grid cols-3">
               <div class="form-group"><label>Horas ordinarias</label><input type="number" id="nom-horas" min="0" placeholder="240"></div>
-              <div class="form-group"><label>Salario ordinario (C$)</label><input type="number" id="nom-salario" min="0" step="any" placeholder="0"></div>
-              <div class="form-group"><label>Horas extra</label><input type="number" id="nom-he" min="0" step="any" placeholder="0"></div>
-              <div class="form-group"><label>Valor por hora extra (C$)</label><input type="number" id="nom-valhe" min="0" step="any" placeholder="0"></div>
+              <div class="form-group"><label>Salario ordinario (C$)</label><input type="number" id="nom-salario" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
+              <div class="form-group"><label>Horas extra</label><input type="number" id="nom-he" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
+              <div class="form-group"><label>Valor por hora extra (C$)</label><input type="number" id="nom-valhe" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
             </div>
           </div>
           <div class="form-section-block" data-num="3">
-            <div class="form-section-title">Deducciones y clasificación</div>
+            <div class="form-section-title">Deducciones — cálculo automático</div>
             <div class="form-grid cols-3">
-              <div class="form-group"><label>INSS laboral (C$)</label><input type="number" id="nom-inss" min="0" step="any" placeholder="0"></div>
-              <div class="form-group"><label>IR (C$)</label><input type="number" id="nom-ir" min="0" step="any" placeholder="0"></div>
-              <div class="form-group"><label>Otras deducciones (C$)</label><input type="number" id="nom-otras" min="0" step="any" placeholder="0"></div>
+              <div class="form-group form-group-auto">
+                <label>INSS laboral <span class="auto-tag">6.25% auto</span></label>
+                <div class="auto-value" id="nom-inss-display">C$ 0</div>
+              </div>
+              <div class="form-group form-group-auto">
+                <label>IR <span class="auto-tag">tabla auto</span></label>
+                <div class="auto-value" id="nom-ir-display">C$ 0</div>
+              </div>
+              <div class="form-group"><label>Otras deducciones (C$)</label><input type="number" id="nom-otras" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
               <div class="form-group"><label>Clasificación contable</label><select id="nom-clasif"><option value="MOD">Mano de obra directa (MOD)</option><option value="MOI">Mano de obra indirecta (MOI)</option><option value="Gasto administrativo">Gasto administrativo</option><option value="Gasto de venta">Gasto de venta</option></select></div>
+            </div>
+            <div class="deducciones-preview" id="deducciones-preview">
+              <span>Total deducciones estimadas</span>
+              <strong id="nom-deduc-total-preview">C$ 0</strong>
             </div>
           </div>
           <div class="form-actions"><button class="btn-primary" onclick="addTrabajador()">+ Agregar trabajador</button></div>
@@ -296,7 +306,7 @@
           </div>
           <div id="nom-table-wrap"><div class="empty-state"><span class="empty-icon">◉</span>No hay trabajadores registrados</div></div>
         </div>
-        <div class="formula-card"><span class="formula-label">Fórmula</span><span class="formula-text">Salario bruto = Salario ordinario + Pago HE &nbsp;|&nbsp; Neto = Bruto − (INSS + IR + Otras)</span></div>
+        <div class="formula-card"><span class="formula-label">Fórmula</span><span class="formula-text">INSS = Bruto × 6.25% &nbsp;|&nbsp; IR = tabla progresiva LCT &nbsp;|&nbsp; Neto = Bruto − (INSS + IR + Otras)</span></div>
       </div>
 
       <!-- ══════════════ CIF ══════════════ -->
@@ -414,10 +424,12 @@
           <div class="formula-list">
             <div class="formula-item"><span class="formula-num">1</span><div><div class="formula-name">Costo total de material</div><div class="formula-eq">Costo total = Cantidad consumida × Costo unitario</div></div></div>
             <div class="formula-item"><span class="formula-num">2</span><div><div class="formula-name">Salario bruto</div><div class="formula-eq">Salario bruto = Salario ordinario + Pago de horas extra</div></div></div>
-            <div class="formula-item"><span class="formula-num">3</span><div><div class="formula-name">Salario neto</div><div class="formula-eq">Salario neto = Salario bruto − (INSS + IR + Otras deducciones)</div></div></div>
-            <div class="formula-item"><span class="formula-num">4</span><div><div class="formula-name">Total CIF</div><div class="formula-eq">Total CIF = Materiales indirectos + MOI + Otros CIF</div></div></div>
-            <div class="formula-item"><span class="formula-num">5</span><div><div class="formula-name">Costo total de producción</div><div class="formula-eq">Costo total = MD + MOD + CIF</div></div></div>
-            <div class="formula-item"><span class="formula-num">6</span><div><div class="formula-name">Costo unitario</div><div class="formula-eq">Costo unitario = Costo total ÷ Unidades producidas</div></div></div>
+            <div class="formula-item"><span class="formula-num">3</span><div><div class="formula-name">INSS laboral (automático)</div><div class="formula-eq">INSS = Salario bruto × 6.25%</div></div></div>
+            <div class="formula-item"><span class="formula-num">4</span><div><div class="formula-name">IR (automático)</div><div class="formula-eq">IR = tabla progresiva sobre base imponible anualizada (Ley de Concertación Tributaria)</div></div></div>
+            <div class="formula-item"><span class="formula-num">5</span><div><div class="formula-name">Salario neto</div><div class="formula-eq">Salario neto = Salario bruto − (INSS + IR + Otras deducciones)</div></div></div>
+            <div class="formula-item"><span class="formula-num">6</span><div><div class="formula-name">Total CIF</div><div class="formula-eq">Total CIF = Materiales indirectos + MOI + Otros CIF</div></div></div>
+            <div class="formula-item"><span class="formula-num">7</span><div><div class="formula-name">Costo total de producción</div><div class="formula-eq">Costo total = MD + MOD + CIF</div></div></div>
+            <div class="formula-item"><span class="formula-num">8</span><div><div class="formula-name">Costo unitario</div><div class="formula-eq">Costo unitario = Costo total ÷ Unidades producidas</div></div></div>
           </div>
         </div>
       </div>

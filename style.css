@@ -531,3 +531,36 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   transition: all 0.15s;
 }
 .btn-logout:hover { border-color: var(--red-lt); color: var(--red); background: var(--red-lt); }
+
+/* ── CAMPOS AUTOCALCULADOS (INSS / IR) ── */
+.form-group-auto { cursor: default; }
+.form-group-auto label { display: flex; align-items: center; gap: 6px; }
+
+.auto-tag {
+  font-size: 8.5px; font-weight: 600;
+  background: var(--accent-dark); color: var(--accent);
+  padding: 1px 6px; border-radius: 99px;
+  text-transform: none; letter-spacing: 0.02em;
+}
+
+.auto-value {
+  font-family: var(--font-head);
+  font-size: 14px; font-weight: 600;
+  color: var(--accent);
+  padding: 4px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.deducciones-preview {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 16px;
+  background: var(--accent-dark);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  font-size: 12px; color: var(--text2);
+}
+.deducciones-preview strong {
+  font-family: var(--font-head);
+  font-size: 15px; color: var(--accent); font-weight: 700;
+}

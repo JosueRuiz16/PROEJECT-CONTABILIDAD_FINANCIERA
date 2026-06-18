@@ -393,6 +393,50 @@ function renderInventario() {
 }
 
 // ── NÓMINA ──
+// ── CÁLCULO AUTOMÁTICO INSS / IR (Nicaragua) ──
+const INSS_LABORAL_PCT = 0.0625; // 6.25% sobre salario bruto
+
+function calcInss(bruto) {
+  return bruto * INSS_LABORAL_PCT;
+}
+
+// Tabla progresiva de IR (renta del trabajo) sobre base imponible MENSUAL,
+// derivada de la tabla anual vigente (Ley de Concertación Tributaria, Nicaragua)
+function calcIR(brutoMensual, inssMensual) {
+  const baseImponible = brutoMensual - inssMensual;
+  const baseAnual = baseImponible * 12;
+
+  let irAnual = 0;
+  if (baseAnual <= 100000) {
+    irAnual = 0;
+  } else if (baseAnual <= 200000) {
+    irAnual = (baseAnual - 100000) * 0.15;
+  } else if (baseAnual <= 350000) {
+    irAnual = 15000 + (baseAnual - 200000) * 0.20;
+  } else if (baseAnual <= 500000) {
+    irAnual = 45000 + (baseAnual - 350000) * 0.25;
+  } else {
+    irAnual = 82500 + (baseAnual - 500000) * 0.30;
+  }
+  return irAnual / 12;
+}
+
+function previewDeducciones() {
+  const salario = parseFloat(document.getElementById('nom-salario').value) || 0;
+  const he      = parseFloat(document.getElementById('nom-he').value) || 0;
+  const valhe   = parseFloat(document.getElementById('nom-valhe').value) || 0;
+  const otras   = parseFloat(document.getElementById('nom-otras').value) || 0;
+
+  const bruto = salario + (he * valhe);
+  const inss  = calcInss(bruto);
+  const ir    = calcIR(bruto, inss);
+  const total = inss + ir + otras;
+
+  document.getElementById('nom-inss-display').textContent = fmt(inss);
+  document.getElementById('nom-ir-display').textContent   = fmt(ir);
+  document.getElementById('nom-deduc-total-preview').textContent = fmt(total);
+}
+
 function addTrabajador() {
   const nombre  = document.getElementById('nom-nombre').value.trim();
   const cargo   = document.getElementById('nom-cargo').value.trim();
@@ -401,8 +445,6 @@ function addTrabajador() {
   const salario = parseFloat(document.getElementById('nom-salario').value) || 0;
   const he      = parseFloat(document.getElementById('nom-he').value) || 0;
   const valhe   = parseFloat(document.getElementById('nom-valhe').value) || 0;
-  const inss    = parseFloat(document.getElementById('nom-inss').value) || 0;
-  const ir      = parseFloat(document.getElementById('nom-ir').value) || 0;
   const otras   = parseFloat(document.getElementById('nom-otras').value) || 0;
   const clasif  = document.getElementById('nom-clasif').value;
 
@@ -411,17 +453,23 @@ function addTrabajador() {
 
   const pagoHE = he * valhe;
   const bruto  = salario + pagoHE;
+  const inss   = calcInss(bruto);
+  const ir     = calcIR(bruto, inss);
   const deducciones = inss + ir + otras;
   const neto   = bruto - deducciones;
 
   state.trabajadores.push({ id: Date.now(), nombre, cargo, area, horas, salario, he, valhe, pagoHE, bruto, inss, ir, otras, deducciones, neto, clasif });
 
-  clearInputs(['nom-nombre','nom-cargo','nom-area','nom-horas','nom-salario','nom-he','nom-valhe','nom-inss','nom-ir','nom-otras']);
+  clearInputs(['nom-nombre','nom-cargo','nom-area','nom-horas','nom-salario','nom-he','nom-valhe','nom-otras']);
+  document.getElementById('nom-inss-display').textContent = 'C$ 0';
+  document.getElementById('nom-ir-display').textContent   = 'C$ 0';
+  document.getElementById('nom-deduc-total-preview').textContent = 'C$ 0';
   renderNomina();
   updateDashboard();
   saveState();
   toast('Trabajador "' + nombre + '" registrado.');
 }
+
 
 function delTrabajador(id) {
   state.trabajadores = state.trabajadores.filter(t => t.id !== id);
