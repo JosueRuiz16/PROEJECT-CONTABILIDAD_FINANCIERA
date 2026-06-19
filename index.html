@@ -264,30 +264,54 @@
             </div>
           </div>
           <div class="form-section-block" data-num="2">
-            <div class="form-section-title">Salario y horas</div>
+            <div class="form-section-title">Salario, antigüedad y bonos</div>
             <div class="form-grid cols-3">
-              <div class="form-group"><label>Horas ordinarias</label><input type="number" id="nom-horas" min="0" placeholder="240"></div>
-              <div class="form-group"><label>Salario ordinario (C$)</label><input type="number" id="nom-salario" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
-              <div class="form-group"><label>Horas extra</label><input type="number" id="nom-he" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
-              <div class="form-group"><label>Valor por hora extra (C$)</label><input type="number" id="nom-valhe" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
+              <div class="form-group"><label>Salario base mensual (C$)</label><input type="number" id="nom-salario" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
+              <div class="form-group"><label>Antigüedad (C$)</label><input type="number" id="nom-antiguedad" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
+              <div class="form-group"><label>Bonos regulares (C$)</label><input type="number" id="nom-bonos" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
             </div>
           </div>
           <div class="form-section-block" data-num="3">
-            <div class="form-section-title">Deducciones — cálculo automático</div>
+            <div class="form-section-title">Horas extras — cálculo automático</div>
+            <div class="form-grid cols-3">
+              <div class="form-group"><label>Jornada diaria (horas)</label><input type="number" id="nom-jornada" min="1" step="1" value="8" oninput="previewDeducciones()"></div>
+              <div class="form-group"><label>Cantidad de horas extra</label><input type="number" id="nom-he" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
+              <div class="form-group"><label>Factor de recargo legal</label>
+                <select id="nom-factorhe" onchange="previewDeducciones()">
+                  <option value="1.5">Tiempo y medio (1.5x)</option>
+                  <option value="2">Doble (2x) — feriado/séptimo día</option>
+                </select>
+              </div>
+              <div class="form-group form-group-auto">
+                <label>Valor hora ordinaria <span class="auto-tag">salario÷30÷jornada</span></label>
+                <div class="auto-value" id="nom-valhora-display">C$ 0</div>
+              </div>
+              <div class="form-group form-group-auto">
+                <label>Pago horas extra <span class="auto-tag">auto</span></label>
+                <div class="auto-value" id="nom-pagohe-display">C$ 0</div>
+              </div>
+              <div class="form-group form-group-auto">
+                <label>Salario bruto <span class="auto-tag">auto</span></label>
+                <div class="auto-value" id="nom-bruto-display">C$ 0</div>
+              </div>
+            </div>
+          </div>
+          <div class="form-section-block" data-num="4">
+            <div class="form-section-title">Deducciones laborales — cálculo automático</div>
             <div class="form-grid cols-3">
               <div class="form-group form-group-auto">
-                <label>INSS laboral <span class="auto-tag">6.25% auto</span></label>
+                <label>INSS laboral <span class="auto-tag">7% auto</span></label>
                 <div class="auto-value" id="nom-inss-display">C$ 0</div>
               </div>
               <div class="form-group form-group-auto">
-                <label>IR <span class="auto-tag">tabla auto</span></label>
+                <label>IR laboral <span class="auto-tag">tabla progresiva auto</span></label>
                 <div class="auto-value" id="nom-ir-display">C$ 0</div>
               </div>
               <div class="form-group"><label>Otras deducciones (C$)</label><input type="number" id="nom-otras" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
-              <div class="form-group"><label>Clasificación contable</label><select id="nom-clasif"><option value="MOD">Mano de obra directa (MOD)</option><option value="MOI">Mano de obra indirecta (MOI)</option><option value="Gasto administrativo">Gasto administrativo</option><option value="Gasto de venta">Gasto de venta</option></select></div>
+              <div class="form-group"><label>Clasificación contable / Departamento</label><select id="nom-clasif" onchange="previewDeducciones()"><option value="MOD">Mano de obra directa (MOD) — Producción</option><option value="MOI">Mano de obra indirecta (MOI) — Producción</option><option value="Gasto administrativo">Gasto administrativo — Administración</option><option value="Gasto de venta">Gasto de venta — Ventas</option></select></div>
             </div>
             <div class="deducciones-preview" id="deducciones-preview">
-              <span>Total deducciones estimadas</span>
+              <span>Salario neto a recibir (estimado)</span>
               <strong id="nom-deduc-total-preview">C$ 0</strong>
             </div>
           </div>
@@ -295,7 +319,7 @@
         </div>
         <div class="card">
           <div class="card-head">
-            <span class="card-title">Nómina registrada</span>
+            <span class="card-title">1. Tabla de nómina general</span>
             <div style="display:flex;gap:8px;align-items:center;">
               <div class="kpi-mini-row">
                 <span class="kpi-mini kpi-mini-green">MOD: <strong id="nom-total-mod-mini">C$ 0</strong></span>
@@ -306,7 +330,15 @@
           </div>
           <div id="nom-table-wrap"><div class="empty-state"><span class="empty-icon">◉</span>No hay trabajadores registrados</div></div>
         </div>
-        <div class="formula-card"><span class="formula-label">Fórmula</span><span class="formula-text">INSS = Bruto × 6.25% &nbsp;|&nbsp; IR = tabla progresiva LCT &nbsp;|&nbsp; Neto = Bruto − (INSS + IR + Otras)</span></div>
+        <div class="card">
+          <div class="card-head"><span class="card-title">2. Cuadro resumen de obligaciones patronales</span></div>
+          <div id="nom-patronal-wrap"><div class="empty-state"><span class="empty-icon">◈</span>Registra trabajadores para calcular las cargas patronales</div></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><span class="card-title">3. Distribución contable — asiento de diario</span></div>
+          <div id="nom-asiento-wrap"><div class="empty-state"><span class="empty-icon">▤</span>Registra trabajadores para generar el asiento contable</div></div>
+        </div>
+        <div class="formula-card"><span class="formula-label">Fórmula</span><span class="formula-text">Bruto = Base + Antigüedad + Bonos + HE &nbsp;|&nbsp; INSS = Bruto × 7% &nbsp;|&nbsp; IR = tabla progresiva LCT (exento C$200,000/año) &nbsp;|&nbsp; Neto = Bruto − (INSS + IR + Otras)</span></div>
       </div>
 
       <!-- ══════════════ CIF ══════════════ -->

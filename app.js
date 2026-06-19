@@ -394,75 +394,112 @@ function renderInventario() {
 
 // ── NÓMINA ──
 // ── CÁLCULO AUTOMÁTICO INSS / IR (Nicaragua) ──
-const INSS_LABORAL_PCT = 0.0625; // 6.25% sobre salario bruto
+const INSS_LABORAL_PCT   = 0.07;   // 7% sobre ingresos brutos
+const INSS_PATRONAL_PCT  = 0.225;  // 22.5% sobre salario bruto
+const INATEC_PCT         = 0.02;   // 2% sobre salario bruto
+const VACACIONES_PCT     = 0.0833; // 8.33% (1 mes / 12)
+const AGUINALDO_PCT      = 0.0833; // 8.33% (1 mes / 12)
+const IR_EXENTO_ANUAL    = 200000; // C$200,000 exentos al año (C$16,666.67 mensual)
 
 function calcInss(bruto) {
   return bruto * INSS_LABORAL_PCT;
 }
 
-// Tabla progresiva de IR (renta del trabajo) sobre base imponible MENSUAL,
-// derivada de la tabla anual vigente (Ley de Concertación Tributaria, Nicaragua)
+// Tabla progresiva de IR (renta del trabajo) sobre base imponible MENSUAL.
+// Exento anual C$200,000 (C$16,666.67/mes), tramos progresivos sobre el excedente
+// según la estructura vigente de la Ley de Concertación Tributaria.
 function calcIR(brutoMensual, inssMensual) {
   const baseImponible = brutoMensual - inssMensual;
   const baseAnual = baseImponible * 12;
 
   let irAnual = 0;
-  if (baseAnual <= 100000) {
+  if (baseAnual <= IR_EXENTO_ANUAL) {
     irAnual = 0;
-  } else if (baseAnual <= 200000) {
-    irAnual = (baseAnual - 100000) * 0.15;
   } else if (baseAnual <= 350000) {
-    irAnual = 15000 + (baseAnual - 200000) * 0.20;
+    irAnual = (baseAnual - IR_EXENTO_ANUAL) * 0.15;
   } else if (baseAnual <= 500000) {
-    irAnual = 45000 + (baseAnual - 350000) * 0.25;
+    irAnual = 22500 + (baseAnual - 350000) * 0.20;
+  } else if (baseAnual <= 1000000) {
+    irAnual = 52500 + (baseAnual - 500000) * 0.25;
   } else {
-    irAnual = 82500 + (baseAnual - 500000) * 0.30;
+    irAnual = 177500 + (baseAnual - 1000000) * 0.30;
   }
   return irAnual / 12;
 }
 
+// Devuelve todos los cálculos derivados de los valores actuales del formulario / trabajador
+function calcNomina({ salario, antiguedad, bonos, jornada, he, factorHE, otras }) {
+  const valorHoraOrd = jornada > 0 ? (salario / 30) / jornada : 0;
+  const pagoHE  = he * valorHoraOrd * factorHE;
+  const bruto   = salario + antiguedad + bonos + pagoHE;
+  const inss    = calcInss(bruto);
+  const ir      = calcIR(bruto, inss);
+  const deducciones = inss + ir + otras;
+  const neto    = bruto - deducciones;
+
+  // Cargas patronales y provisiones (sobre el salario bruto del trabajador)
+  const inssPatronal = bruto * INSS_PATRONAL_PCT;
+  const inatec        = bruto * INATEC_PCT;
+  const vacaciones    = bruto * VACACIONES_PCT;
+  const aguinaldo      = bruto * AGUINALDO_PCT;
+
+  return { valorHoraOrd, pagoHE, bruto, inss, ir, deducciones, neto, inssPatronal, inatec, vacaciones, aguinaldo };
+}
+
+function readNomFormValues() {
+  return {
+    salario:    parseFloat(document.getElementById('nom-salario').value) || 0,
+    antiguedad: parseFloat(document.getElementById('nom-antiguedad').value) || 0,
+    bonos:      parseFloat(document.getElementById('nom-bonos').value) || 0,
+    jornada:    parseFloat(document.getElementById('nom-jornada').value) || 8,
+    he:         parseFloat(document.getElementById('nom-he').value) || 0,
+    factorHE:   parseFloat(document.getElementById('nom-factorhe').value) || 1.5,
+    otras:      parseFloat(document.getElementById('nom-otras').value) || 0
+  };
+}
+
 function previewDeducciones() {
-  const salario = parseFloat(document.getElementById('nom-salario').value) || 0;
-  const he      = parseFloat(document.getElementById('nom-he').value) || 0;
-  const valhe   = parseFloat(document.getElementById('nom-valhe').value) || 0;
-  const otras   = parseFloat(document.getElementById('nom-otras').value) || 0;
+  const vals = readNomFormValues();
+  const c = calcNomina(vals);
 
-  const bruto = salario + (he * valhe);
-  const inss  = calcInss(bruto);
-  const ir    = calcIR(bruto, inss);
-  const total = inss + ir + otras;
-
-  document.getElementById('nom-inss-display').textContent = fmt(inss);
-  document.getElementById('nom-ir-display').textContent   = fmt(ir);
-  document.getElementById('nom-deduc-total-preview').textContent = fmt(total);
+  document.getElementById('nom-valhora-display').textContent   = fmt(c.valorHoraOrd);
+  document.getElementById('nom-pagohe-display').textContent    = fmt(c.pagoHE);
+  document.getElementById('nom-bruto-display').textContent     = fmt(c.bruto);
+  document.getElementById('nom-inss-display').textContent      = fmt(c.inss);
+  document.getElementById('nom-ir-display').textContent        = fmt(c.ir);
+  document.getElementById('nom-deduc-total-preview').textContent = fmt(c.neto);
 }
 
 function addTrabajador() {
   const nombre  = document.getElementById('nom-nombre').value.trim();
   const cargo   = document.getElementById('nom-cargo').value.trim();
   const area    = document.getElementById('nom-area').value.trim();
-  const horas   = parseFloat(document.getElementById('nom-horas').value) || 0;
-  const salario = parseFloat(document.getElementById('nom-salario').value) || 0;
-  const he      = parseFloat(document.getElementById('nom-he').value) || 0;
-  const valhe   = parseFloat(document.getElementById('nom-valhe').value) || 0;
-  const otras   = parseFloat(document.getElementById('nom-otras').value) || 0;
   const clasif  = document.getElementById('nom-clasif').value;
+  const vals    = readNomFormValues();
 
   if (!nombre) { toast('El nombre del trabajador es obligatorio.', 'warn'); return; }
-  if (salario <= 0) { toast('El salario ordinario debe ser mayor a cero.', 'warn'); return; }
+  if (vals.salario <= 0) { toast('El salario base debe ser mayor a cero.', 'warn'); return; }
 
-  const pagoHE = he * valhe;
-  const bruto  = salario + pagoHE;
-  const inss   = calcInss(bruto);
-  const ir     = calcIR(bruto, inss);
-  const deducciones = inss + ir + otras;
-  const neto   = bruto - deducciones;
+  const c = calcNomina(vals);
 
-  state.trabajadores.push({ id: Date.now(), nombre, cargo, area, horas, salario, he, valhe, pagoHE, bruto, inss, ir, otras, deducciones, neto, clasif });
+  state.trabajadores.push({
+    id: Date.now(), nombre, cargo, area, clasif,
+    salario: vals.salario, antiguedad: vals.antiguedad, bonos: vals.bonos,
+    jornada: vals.jornada, he: vals.he, factorHE: vals.factorHE,
+    valorHoraOrd: c.valorHoraOrd, pagoHE: c.pagoHE,
+    bruto: c.bruto, inss: c.inss, ir: c.ir, otras: vals.otras,
+    deducciones: c.deducciones, neto: c.neto,
+    inssPatronal: c.inssPatronal, inatec: c.inatec,
+    vacaciones: c.vacaciones, aguinaldo: c.aguinaldo
+  });
 
-  clearInputs(['nom-nombre','nom-cargo','nom-area','nom-horas','nom-salario','nom-he','nom-valhe','nom-otras']);
-  document.getElementById('nom-inss-display').textContent = 'C$ 0';
-  document.getElementById('nom-ir-display').textContent   = 'C$ 0';
+  clearInputs(['nom-nombre','nom-cargo','nom-area','nom-salario','nom-antiguedad','nom-bonos','nom-he','nom-otras']);
+  document.getElementById('nom-jornada').value = 8;
+  document.getElementById('nom-valhora-display').textContent = 'C$ 0';
+  document.getElementById('nom-pagohe-display').textContent  = 'C$ 0';
+  document.getElementById('nom-bruto-display').textContent   = 'C$ 0';
+  document.getElementById('nom-inss-display').textContent    = 'C$ 0';
+  document.getElementById('nom-ir-display').textContent      = 'C$ 0';
   document.getElementById('nom-deduc-total-preview').textContent = 'C$ 0';
   renderNomina();
   updateDashboard();
@@ -479,6 +516,14 @@ function delTrabajador(id) {
   toast('Trabajador eliminado.');
 }
 
+// Departamento contable según clasificación (para asiento de diario)
+function deptoDe(clasif) {
+  if (clasif === 'MOD' || clasif === 'MOI') return 'Producción / Costos';
+  if (clasif === 'Gasto administrativo') return 'Administración';
+  if (clasif === 'Gasto de venta') return 'Ventas';
+  return 'Otros';
+}
+
 function renderNomina() {
   const wrap = document.getElementById('nom-table-wrap');
   const mod = state.trabajadores.filter(t => t.clasif === 'MOD').reduce((a, t) => a + t.bruto, 0);
@@ -486,6 +531,9 @@ function renderNomina() {
 
   document.getElementById('nom-total-mod-mini').textContent = fmt(mod);
   document.getElementById('nom-total-moi-mini').textContent = fmt(moi);
+
+  renderPatronal();
+  renderAsiento();
 
   if (state.trabajadores.length === 0) {
     wrap.innerHTML = '<div class="empty-state"><div class="empty-icon">◉</div><div>No hay trabajadores registrados</div></div>';
@@ -499,18 +547,24 @@ function renderNomina() {
     'Gasto de venta': 'pill-purple'
   };
 
+  const totBruto = state.trabajadores.reduce((a, t) => a + t.bruto, 0);
+  const totInss  = state.trabajadores.reduce((a, t) => a + t.inss, 0);
+  const totIr    = state.trabajadores.reduce((a, t) => a + t.ir, 0);
+  const totDeduc = state.trabajadores.reduce((a, t) => a + t.deducciones, 0);
+  const totNeto  = state.trabajadores.reduce((a, t) => a + t.neto, 0);
+
   const rows = state.trabajadores.map(t => `
     <tr>
       <td>${t.nombre}</td>
       <td>${t.cargo || '—'}</td>
-      <td>${t.area || '—'}</td>
-      <td class="num">${fmtNum(t.horas)} h</td>
       <td class="num">${fmt(t.salario)}</td>
-      <td class="num">${t.he > 0 ? fmtNum(t.he) + ' h' : '—'}</td>
+      <td class="num">${t.antiguedad > 0 ? fmt(t.antiguedad) : '—'}</td>
       <td class="num">${t.pagoHE > 0 ? fmt(t.pagoHE) : '—'}</td>
       <td class="num"><strong>${fmt(t.bruto)}</strong></td>
-      <td class="num">${t.deducciones > 0 ? fmt(t.deducciones) : '—'}</td>
-      <td class="num">${fmt(t.neto)}</td>
+      <td class="num">${fmt(t.inss)}</td>
+      <td class="num">${fmt(t.ir)}</td>
+      <td class="num">${fmt(t.deducciones)}</td>
+      <td class="num"><strong>${fmt(t.neto)}</strong></td>
       <td><span class="pill ${clasifPill[t.clasif] || 'pill-gray'}">${t.clasif}</span></td>
       <td><button class="btn-danger" onclick="delTrabajador(${t.id})" title="Eliminar">✕</button></td>
     </tr>
@@ -521,16 +575,16 @@ function renderNomina() {
       <table>
         <thead>
           <tr>
-            <th>Trabajador</th>
+            <th>Nombre</th>
             <th>Cargo</th>
-            <th>Área</th>
-            <th class="num">Horas ord.</th>
-            <th class="num">Sal. ordinario</th>
-            <th class="num">HE</th>
-            <th class="num">Pago HE</th>
-            <th class="num">Sal. bruto</th>
-            <th class="num">Deducciones</th>
-            <th class="num">Sal. neto</th>
+            <th class="num">Salario base</th>
+            <th class="num">Antigüedad</th>
+            <th class="num">Horas extras</th>
+            <th class="num">Ingresos brutos</th>
+            <th class="num">INSS laboral</th>
+            <th class="num">IR laboral</th>
+            <th class="num">Total deducciones</th>
+            <th class="num">Salario neto</th>
             <th>Clasificación</th>
             <th></th>
           </tr>
@@ -538,18 +592,179 @@ function renderNomina() {
         <tbody>
           ${rows}
           <tr class="total-row">
-            <td colspan="7">Total mano de obra directa (MOD)</td>
+            <td colspan="2">TOTALES</td>
+            <td class="num"></td>
+            <td class="num"></td>
+            <td class="num"></td>
+            <td class="num">${fmt(totBruto)}</td>
+            <td class="num">${fmt(totInss)}</td>
+            <td class="num">${fmt(totIr)}</td>
+            <td class="num">${fmt(totDeduc)}</td>
+            <td class="num">${fmt(totNeto)}</td>
+            <td></td><td></td>
+          </tr>
+          <tr class="total-row">
+            <td colspan="5">Total mano de obra directa (MOD)</td>
             <td class="num">${fmt(mod)}</td>
-            <td></td>
-            <td></td>
-            <td></td>
-            <td></td>
+            <td colspan="5"></td>
+          </tr>
+          <tr class="total-row">
+            <td colspan="5">Total mano de obra indirecta (MOI)</td>
+            <td class="num">${fmt(moi)}</td>
+            <td colspan="5"></td>
           </tr>
         </tbody>
       </table>
     </div>
   `;
 }
+
+// ── CUADRO RESUMEN DE OBLIGACIONES PATRONALES ──
+function renderPatronal() {
+  const wrap = document.getElementById('nom-patronal-wrap');
+  if (!wrap) return;
+  if (state.trabajadores.length === 0) {
+    wrap.innerHTML = '<div class="empty-state"><span class="empty-icon">◈</span>Registra trabajadores para calcular las cargas patronales</div>';
+    return;
+  }
+
+  const totBruto      = state.trabajadores.reduce((a, t) => a + t.bruto, 0);
+  const totInssPat    = state.trabajadores.reduce((a, t) => a + t.inssPatronal, 0);
+  const totInatec     = state.trabajadores.reduce((a, t) => a + t.inatec, 0);
+  const totVacaciones = state.trabajadores.reduce((a, t) => a + t.vacaciones, 0);
+  const totAguinaldo  = state.trabajadores.reduce((a, t) => a + t.aguinaldo, 0);
+  const totProvisiones = totVacaciones + totAguinaldo;
+  const totCargaPatronal = totInssPat + totInatec;
+  const totCostoLaboral  = totBruto + totCargaPatronal + totProvisiones;
+
+  wrap.innerHTML = `
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>Concepto</th>
+            <th class="num">Base de cálculo</th>
+            <th class="num">% aplicado</th>
+            <th class="num">Total a pagar</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>INSS Patronal</td><td class="num">${fmt(totBruto)}</td><td class="num">22.5%</td><td class="num"><strong>${fmt(totInssPat)}</strong></td></tr>
+          <tr><td>INATEC</td><td class="num">${fmt(totBruto)}</td><td class="num">2%</td><td class="num"><strong>${fmt(totInatec)}</strong></td></tr>
+          <tr class="total-row"><td>Total cargas patronales (INSS + INATEC)</td><td></td><td></td><td class="num"><strong>${fmt(totCargaPatronal)}</strong></td></tr>
+          <tr><td>Provisión Vacaciones</td><td class="num">${fmt(totBruto)}</td><td class="num">8.33%</td><td class="num">${fmt(totVacaciones)}</td></tr>
+          <tr><td>Provisión Treceavo mes (Aguinaldo)</td><td class="num">${fmt(totBruto)}</td><td class="num">8.33%</td><td class="num">${fmt(totAguinaldo)}</td></tr>
+          <tr class="total-row"><td>Total provisiones / prestaciones sociales</td><td></td><td></td><td class="num"><strong>${fmt(totProvisiones)}</strong></td></tr>
+          <tr class="total-row"><td colspan="3">COSTO LABORAL TOTAL (Bruto + cargas + provisiones)</td><td class="num"><strong>${fmt(totCostoLaboral)}</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ── DISTRIBUCIÓN CONTABLE — ASIENTO DE DIARIO ──
+function renderAsiento() {
+  const wrap = document.getElementById('nom-asiento-wrap');
+  if (!wrap) return;
+  if (state.trabajadores.length === 0) {
+    wrap.innerHTML = '<div class="empty-state"><span class="empty-icon">▤</span>Registra trabajadores para generar el asiento contable</div>';
+    return;
+  }
+
+  const deptos = ['Producción / Costos', 'Administración', 'Ventas'];
+  const porDepto = {};
+  deptos.forEach(d => porDepto[d] = { bruto: 0, inssPatronal: 0, inatec: 0, vacaciones: 0, aguinaldo: 0 });
+
+  state.trabajadores.forEach(t => {
+    const d = deptoDe(t.clasif);
+    if (!porDepto[d]) porDepto[d] = { bruto: 0, inssPatronal: 0, inatec: 0, vacaciones: 0, aguinaldo: 0 };
+    porDepto[d].bruto        += t.bruto;
+    porDepto[d].inssPatronal += t.inssPatronal;
+    porDepto[d].inatec       += t.inatec;
+    porDepto[d].vacaciones   += t.vacaciones;
+    porDepto[d].aguinaldo    += t.aguinaldo;
+  });
+
+  const cuentaGasto = {
+    'Producción / Costos': 'Costos de producción — Mano de obra',
+    'Administración': 'Gastos de administración — Sueldos y salarios',
+    'Ventas': 'Gastos de venta — Sueldos y salarios',
+    'Otros': 'Otros gastos de personal'
+  };
+
+  const totInss   = state.trabajadores.reduce((a, t) => a + t.inss, 0);
+  const totIr     = state.trabajadores.reduce((a, t) => a + t.ir, 0);
+  const totOtras  = state.trabajadores.reduce((a, t) => a + t.otras, 0);
+  const totNeto   = state.trabajadores.reduce((a, t) => a + t.neto, 0);
+  const totBruto  = state.trabajadores.reduce((a, t) => a + t.bruto, 0);
+  const totInssPat = state.trabajadores.reduce((a, t) => a + t.inssPatronal, 0);
+  const totInatec   = state.trabajadores.reduce((a, t) => a + t.inatec, 0);
+  const totVac      = state.trabajadores.reduce((a, t) => a + t.vacaciones, 0);
+  const totAgui     = state.trabajadores.reduce((a, t) => a + t.aguinaldo, 0);
+
+  let rowsHtml = '';
+  let totalDebe = 0, totalHaber = 0;
+
+  // 1) Registro de salarios devengados por departamento (DEBE)
+  Object.keys(porDepto).forEach(d => {
+    const v = porDepto[d];
+    if (v.bruto <= 0) return;
+    rowsHtml += `<tr><td>${cuentaGasto[d] || d}</td><td class="num">${fmt(v.bruto)}</td><td class="num">—</td></tr>`;
+    totalDebe += v.bruto;
+  });
+  // 1b) Cargas patronales por departamento (DEBE)
+  Object.keys(porDepto).forEach(d => {
+    const v = porDepto[d];
+    const carga = v.inssPatronal + v.inatec;
+    if (carga <= 0) return;
+    rowsHtml += `<tr><td>${cuentaGasto[d] || d} — Cargas patronales (INSS 22.5% + INATEC 2%)</td><td class="num">${fmt(carga)}</td><td class="num">—</td></tr>`;
+    totalDebe += carga;
+  });
+  // 1c) Provisiones por departamento (DEBE)
+  Object.keys(porDepto).forEach(d => {
+    const v = porDepto[d];
+    const prov = v.vacaciones + v.aguinaldo;
+    if (prov <= 0) return;
+    rowsHtml += `<tr><td>${cuentaGasto[d] || d} — Provisión vacaciones y treceavo mes</td><td class="num">${fmt(prov)}</td><td class="num">—</td></tr>`;
+    totalDebe += prov;
+  });
+
+  // 2) Créditos (HABER)
+  const haberRows = [
+    ['Salarios por pagar (neto a empleados)', totNeto],
+    ['INSS por pagar (laboral 7% + patronal 22.5%)', totInss + totInssPat],
+    ['IR por pagar (retención laboral)', totIr],
+    ['INATEC por pagar (2%)', totInatec],
+    ['Vacaciones por pagar (provisión)', totVac],
+    ['Aguinaldo / Treceavo mes por pagar (provisión)', totAgui]
+  ];
+  if (totOtras > 0) haberRows.push(['Otras deducciones por pagar', totOtras]);
+
+  haberRows.forEach(([cuenta, monto]) => {
+    if (monto <= 0) return;
+    rowsHtml += `<tr><td>${cuenta}</td><td class="num">—</td><td class="num">${fmt(monto)}</td></tr>`;
+    totalHaber += monto;
+  });
+
+  wrap.innerHTML = `
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr><th>Cuenta</th><th class="num">Debe</th><th class="num">Haber</th></tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+          <tr class="total-row"><td>TOTALES</td><td class="num">${fmt(totalDebe)}</td><td class="num">${fmt(totalHaber)}</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:12px;color:var(--text2);margin-top:8px;">
+      El gasto/costo y las cargas patronales se distribuyen según la clasificación contable de cada trabajador:
+      MOD y MOI → Producción/Costos, Gasto administrativo → Administración, Gasto de venta → Ventas.
+    </p>
+  `;
+}
+
 
 // ── CIF ──
 function addCIF() {
@@ -860,8 +1075,16 @@ function cargarEjemplo() {
 
   // Nómina
   state.trabajadores = [
-    { id: 1, nombre: 'Juan Pérez', cargo: 'Operario', area: 'Producción', horas: 240, salario: 12000, he: 10, valhe: 100, pagoHE: 1000, bruto: 13000, inss: 780, ir: 0, otras: 130, deducciones: 910, neto: 12090, clasif: 'MOD' },
-    { id: 2, nombre: 'Ana Ruiz', cargo: 'Supervisora', area: 'Producción', horas: 240, salario: 8000, he: 0, valhe: 0, pagoHE: 0, bruto: 8000, inss: 480, ir: 0, otras: 80, deducciones: 560, neto: 7440, clasif: 'MOI' }
+    { id: 1, nombre: 'Juan Pérez', cargo: 'Operario', area: 'Producción', clasif: 'MOD',
+      salario: 12000, antiguedad: 500, bonos: 0, jornada: 8, he: 10, factorHE: 1.5,
+      valorHoraOrd: 50, pagoHE: 750, bruto: 13250, inss: 927.5, ir: 0, otras: 130,
+      deducciones: 1057.5, neto: 12192.5,
+      inssPatronal: 2981.25, inatec: 265, vacaciones: 1103.73, aguinaldo: 1103.73 },
+    { id: 2, nombre: 'Ana Ruiz', cargo: 'Supervisora', area: 'Producción', clasif: 'MOI',
+      salario: 8000, antiguedad: 0, bonos: 0, jornada: 8, he: 0, factorHE: 1.5,
+      valorHoraOrd: 33.33, pagoHE: 0, bruto: 8000, inss: 560, ir: 0, otras: 80,
+      deducciones: 640, neto: 7360,
+      inssPatronal: 1800, inatec: 160, vacaciones: 666.4, aguinaldo: 666.4 }
   ];
 
   // CIF
@@ -1082,23 +1305,130 @@ function exportNomina() {
   const empresa = state.empresa ? state.empresa.nombre : 'Empresa';
 
   const wb = XLSX.utils.book_new();
+
+  // ── Hoja 1: Tabla de nómina general ──
   const rows = [
     [empresa],
-    ['MÓDULO DE NÓMINA — PLANILLA DE PRODUCCIÓN'],
+    ['MÓDULO DE NÓMINA — TABLA DE NÓMINA GENERAL'],
     [],
-    ['Trabajador', 'Cargo', 'Área', 'Horas ord.', 'Sal. ordinario', 'HE', 'Pago HE', 'Sal. bruto', 'INSS', 'IR', 'Otras ded.', 'Total ded.', 'Sal. neto', 'Clasificación'],
+    ['Nombre', 'Cargo', 'Salario base', 'Antigüedad', 'Bonos', 'Horas extra (pago)', 'Ingresos brutos', 'INSS laboral', 'IR laboral', 'Otras ded.', 'Total deducciones', 'Salario neto', 'Clasificación'],
   ];
   state.trabajadores.forEach(t => {
-    rows.push([t.nombre, t.cargo, t.area, xlsxNum(t.horas), xlsxNum(t.salario), xlsxNum(t.he), xlsxNum(t.pagoHE), xlsxNum(t.bruto), xlsxNum(t.inss), xlsxNum(t.ir), xlsxNum(t.otras), xlsxNum(t.deducciones), xlsxNum(t.neto), t.clasif]);
+    rows.push([t.nombre, t.cargo, xlsxNum(t.salario), xlsxNum(t.antiguedad), xlsxNum(t.bonos), xlsxNum(t.pagoHE), xlsxNum(t.bruto), xlsxNum(t.inss), xlsxNum(t.ir), xlsxNum(t.otras), xlsxNum(t.deducciones), xlsxNum(t.neto), t.clasif]);
   });
   const mod = state.trabajadores.filter(t => t.clasif === 'MOD').reduce((a, t) => a + t.bruto, 0);
   const moi = state.trabajadores.filter(t => t.clasif === 'MOI').reduce((a, t) => a + t.bruto, 0);
-  rows.push([], ['', '', '', '', '', '', '', 'Total MOD (bruto)', '', '', '', '', '', xlsxNum(mod)], ['', '', '', '', '', '', '', 'Total MOI (bruto)', '', '', '', '', '', xlsxNum(moi)]);
+  const totBruto = state.trabajadores.reduce((a, t) => a + t.bruto, 0);
+  const totInss  = state.trabajadores.reduce((a, t) => a + t.inss, 0);
+  const totIr    = state.trabajadores.reduce((a, t) => a + t.ir, 0);
+  const totDeduc = state.trabajadores.reduce((a, t) => a + t.deducciones, 0);
+  const totNeto  = state.trabajadores.reduce((a, t) => a + t.neto, 0);
+  rows.push([], ['', '', '', '', '', 'TOTALES', xlsxNum(totBruto), xlsxNum(totInss), xlsxNum(totIr), '', xlsxNum(totDeduc), xlsxNum(totNeto), '']);
+  rows.push(['', '', '', '', '', '', '', '', '', '', 'Total MOD (bruto)', xlsxNum(mod), '']);
+  rows.push(['', '', '', '', '', '', '', '', '', '', 'Total MOI (bruto)', xlsxNum(moi), '']);
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:13} }, { s:{r:1,c:0}, e:{r:1,c:13} }];
-  setColWidths(ws, [22, 16, 14, 10, 14, 6, 10, 12, 10, 10, 12, 10, 12, 16]);
+  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:12} }, { s:{r:1,c:0}, e:{r:1,c:12} }];
+  setColWidths(ws, [22, 16, 12, 12, 10, 14, 14, 12, 12, 10, 16, 12, 18]);
   XLSX.utils.book_append_sheet(wb, ws, 'Nómina');
+
+  // ── Hoja 2: Resumen de obligaciones patronales ──
+  const totInssPat    = state.trabajadores.reduce((a, t) => a + t.inssPatronal, 0);
+  const totInatec      = state.trabajadores.reduce((a, t) => a + t.inatec, 0);
+  const totVacaciones  = state.trabajadores.reduce((a, t) => a + t.vacaciones, 0);
+  const totAguinaldo   = state.trabajadores.reduce((a, t) => a + t.aguinaldo, 0);
+  const totCargaPat    = totInssPat + totInatec;
+  const totProvisiones = totVacaciones + totAguinaldo;
+
+  const rowsPat = [
+    [empresa],
+    ['CUADRO RESUMEN DE OBLIGACIONES PATRONALES'],
+    [],
+    ['Concepto', 'Base de cálculo', '% aplicado', 'Total a pagar'],
+    ['INSS Patronal', xlsxNum(totBruto), 0.225, xlsxNum(totInssPat)],
+    ['INATEC', xlsxNum(totBruto), 0.02, xlsxNum(totInatec)],
+    ['Total cargas patronales', '', '', xlsxNum(totCargaPat)],
+    [],
+    ['Provisión Vacaciones', xlsxNum(totBruto), 0.0833, xlsxNum(totVacaciones)],
+    ['Provisión Treceavo mes (Aguinaldo)', xlsxNum(totBruto), 0.0833, xlsxNum(totAguinaldo)],
+    ['Total provisiones / prestaciones sociales', '', '', xlsxNum(totProvisiones)],
+    [],
+    ['COSTO LABORAL TOTAL (Bruto + cargas + provisiones)', '', '', xlsxNum(totBruto + totCargaPat + totProvisiones)],
+  ];
+  const wsPat = XLSX.utils.aoa_to_sheet(rowsPat);
+  wsPat['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:3} }, { s:{r:1,c:0}, e:{r:1,c:3} }];
+  ['C5','C6','C9','C10'].forEach(cell => { if (wsPat[cell]) wsPat[cell].z = '0.0%'; });
+  setColWidths(wsPat, [42, 16, 12, 16]);
+  XLSX.utils.book_append_sheet(wb, wsPat, 'Obligaciones patronales');
+
+  // ── Hoja 3: Distribución contable / asiento de diario ──
+  const deptos = ['Producción / Costos', 'Administración', 'Ventas'];
+  const porDepto = {};
+  deptos.forEach(d => porDepto[d] = { bruto: 0, inssPatronal: 0, inatec: 0, vacaciones: 0, aguinaldo: 0 });
+  state.trabajadores.forEach(t => {
+    const d = deptoDe(t.clasif);
+    if (!porDepto[d]) porDepto[d] = { bruto: 0, inssPatronal: 0, inatec: 0, vacaciones: 0, aguinaldo: 0 };
+    porDepto[d].bruto        += t.bruto;
+    porDepto[d].inssPatronal += t.inssPatronal;
+    porDepto[d].inatec       += t.inatec;
+    porDepto[d].vacaciones   += t.vacaciones;
+    porDepto[d].aguinaldo    += t.aguinaldo;
+  });
+  const cuentaGasto = {
+    'Producción / Costos': 'Costos de producción — Mano de obra',
+    'Administración': 'Gastos de administración — Sueldos y salarios',
+    'Ventas': 'Gastos de venta — Sueldos y salarios',
+    'Otros': 'Otros gastos de personal'
+  };
+  const totOtras = state.trabajadores.reduce((a, t) => a + t.otras, 0);
+
+  const rowsAsiento = [
+    [empresa],
+    ['DISTRIBUCIÓN CONTABLE — ASIENTO DE DIARIO (PLANILLA)'],
+    [],
+    ['Cuenta', 'Debe', 'Haber'],
+  ];
+  let totalDebe = 0, totalHaber = 0;
+  Object.keys(porDepto).forEach(d => {
+    const v = porDepto[d];
+    if (v.bruto <= 0) return;
+    rowsAsiento.push([cuentaGasto[d] || d, xlsxNum(v.bruto), '']);
+    totalDebe += v.bruto;
+  });
+  Object.keys(porDepto).forEach(d => {
+    const v = porDepto[d];
+    const carga = v.inssPatronal + v.inatec;
+    if (carga <= 0) return;
+    rowsAsiento.push([`${cuentaGasto[d] || d} — Cargas patronales (INSS 22.5% + INATEC 2%)`, xlsxNum(carga), '']);
+    totalDebe += carga;
+  });
+  Object.keys(porDepto).forEach(d => {
+    const v = porDepto[d];
+    const prov = v.vacaciones + v.aguinaldo;
+    if (prov <= 0) return;
+    rowsAsiento.push([`${cuentaGasto[d] || d} — Provisión vacaciones y treceavo mes`, xlsxNum(prov), '']);
+    totalDebe += prov;
+  });
+  const haberRows = [
+    ['Salarios por pagar (neto a empleados)', totNeto],
+    ['INSS por pagar (laboral 7% + patronal 22.5%)', totInss + totInssPat],
+    ['IR por pagar (retención laboral)', totIr],
+    ['INATEC por pagar (2%)', totInatec],
+    ['Vacaciones por pagar (provisión)', totVacaciones],
+    ['Aguinaldo / Treceavo mes por pagar (provisión)', totAguinaldo]
+  ];
+  if (totOtras > 0) haberRows.push(['Otras deducciones por pagar', totOtras]);
+  haberRows.forEach(([cuenta, monto]) => {
+    if (monto <= 0) return;
+    rowsAsiento.push([cuenta, '', xlsxNum(monto)]);
+    totalHaber += monto;
+  });
+  rowsAsiento.push([], ['TOTALES', xlsxNum(totalDebe), xlsxNum(totalHaber)]);
+
+  const wsAsi = XLSX.utils.aoa_to_sheet(rowsAsiento);
+  wsAsi['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:2} }, { s:{r:1,c:0}, e:{r:1,c:2} }];
+  setColWidths(wsAsi, [50, 16, 16]);
+  XLSX.utils.book_append_sheet(wb, wsAsi, 'Asiento contable');
 
   XLSX.writeFile(wb, `Nomina_${empresa.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
   toast('Nómina exportada a Excel.');
