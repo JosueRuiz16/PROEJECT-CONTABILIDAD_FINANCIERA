@@ -394,15 +394,23 @@ function renderInventario() {
 
 // ── NÓMINA ──
 // ── CÁLCULO AUTOMÁTICO INSS / IR (Nicaragua) ──
-const INSS_LABORAL_PCT   = 0.07;   // 7% sobre ingresos brutos
-const INSS_PATRONAL_PCT  = 0.225;  // 22.5% sobre salario bruto
+const INSS_LABORAL_PCT   = 0.07;   // 7% sobre ingresos brutos (Reforma INSS, vigente)
+const INSS_PATRONAL_PCT  = 0.225;  // 22.5% — empresas con más de 50 trabajadores
+const INSS_PATRONAL_PYME = 0.215;  // 21.5% — empresas con 50 trabajadores o menos
 const INATEC_PCT         = 0.02;   // 2% sobre salario bruto
 const VACACIONES_PCT     = 0.0833; // 8.33% (1 mes / 12)
 const AGUINALDO_PCT      = 0.0833; // 8.33% (1 mes / 12)
 const IR_EXENTO_ANUAL    = 200000; // C$200,000 exentos al año (C$16,666.67 mensual)
+const RECARGO_HE_LEGAL   = 2.0;    // Art. 62 Código del Trabajo: 100% de recargo = pago doble, fijo por ley
 
 function calcInss(bruto) {
   return bruto * INSS_LABORAL_PCT;
+}
+
+// Tasa patronal según tamaño de empresa (Art. reforma INSS 2024)
+function getInssPatronalPct() {
+  const numEmpleados = state.trabajadores.length;
+  return numEmpleados > 50 ? INSS_PATRONAL_PCT : INSS_PATRONAL_PYME;
 }
 
 // Tabla progresiva de IR (renta del trabajo) sobre base imponible MENSUAL.
@@ -427,10 +435,13 @@ function calcIR(brutoMensual, inssMensual) {
   return irAnual / 12;
 }
 
-// Devuelve todos los cálculos derivados de los valores actuales del formulario / trabajador
-function calcNomina({ salario, antiguedad, bonos, jornada, he, factorHE, otras }) {
+// Devuelve todos los cálculos derivados de los valores actuales del formulario / trabajador.
+// El recargo de horas extra es FIJO por ley (100% = doble), no editable, según Art. 62 del
+// Código del Trabajo de Nicaragua: toda hora extra se paga al doble del valor de la hora ordinaria,
+// sin distinción entre día normal, séptimo día o feriado.
+function calcNomina({ salario, antiguedad, bonos, jornada, he, otras }) {
   const valorHoraOrd = jornada > 0 ? (salario / 30) / jornada : 0;
-  const pagoHE  = he * valorHoraOrd * factorHE;
+  const pagoHE  = he * valorHoraOrd * RECARGO_HE_LEGAL;
   const bruto   = salario + antiguedad + bonos + pagoHE;
   const inss    = calcInss(bruto);
   const ir      = calcIR(bruto, inss);
@@ -438,12 +449,13 @@ function calcNomina({ salario, antiguedad, bonos, jornada, he, factorHE, otras }
   const neto    = bruto - deducciones;
 
   // Cargas patronales y provisiones (sobre el salario bruto del trabajador)
-  const inssPatronal = bruto * INSS_PATRONAL_PCT;
+  const inssPatronalPct = getInssPatronalPct();
+  const inssPatronal = bruto * inssPatronalPct;
   const inatec        = bruto * INATEC_PCT;
   const vacaciones    = bruto * VACACIONES_PCT;
   const aguinaldo      = bruto * AGUINALDO_PCT;
 
-  return { valorHoraOrd, pagoHE, bruto, inss, ir, deducciones, neto, inssPatronal, inatec, vacaciones, aguinaldo };
+  return { valorHoraOrd, pagoHE, bruto, inss, ir, deducciones, neto, inssPatronal, inssPatronalPct, inatec, vacaciones, aguinaldo };
 }
 
 function readNomFormValues() {
@@ -453,7 +465,6 @@ function readNomFormValues() {
     bonos:      parseFloat(document.getElementById('nom-bonos').value) || 0,
     jornada:    parseFloat(document.getElementById('nom-jornada').value) || 8,
     he:         parseFloat(document.getElementById('nom-he').value) || 0,
-    factorHE:   parseFloat(document.getElementById('nom-factorhe').value) || 1.5,
     otras:      parseFloat(document.getElementById('nom-otras').value) || 0
   };
 }
@@ -485,11 +496,11 @@ function addTrabajador() {
   state.trabajadores.push({
     id: Date.now(), nombre, cargo, area, clasif,
     salario: vals.salario, antiguedad: vals.antiguedad, bonos: vals.bonos,
-    jornada: vals.jornada, he: vals.he, factorHE: vals.factorHE,
+    jornada: vals.jornada, he: vals.he,
     valorHoraOrd: c.valorHoraOrd, pagoHE: c.pagoHE,
     bruto: c.bruto, inss: c.inss, ir: c.ir, otras: vals.otras,
     deducciones: c.deducciones, neto: c.neto,
-    inssPatronal: c.inssPatronal, inatec: c.inatec,
+    inssPatronal: c.inssPatronal, inssPatronalPct: c.inssPatronalPct, inatec: c.inatec,
     vacaciones: c.vacaciones, aguinaldo: c.aguinaldo
   });
 
@@ -637,7 +648,12 @@ function renderPatronal() {
   const totCargaPatronal = totInssPat + totInatec;
   const totCostoLaboral  = totBruto + totCargaPatronal + totProvisiones;
 
+  const tasaPatronal = getInssPatronalPct();
+  const tasaLabel = (tasaPatronal * 100).toFixed(1) + '%';
+  const tamanoEmpresa = state.trabajadores.length > 50 ? 'más de 50 trabajadores' : '50 trabajadores o menos';
+
   wrap.innerHTML = `
+    <div class="info-banner" style="margin-bottom:14px;">Tasa INSS patronal aplicada: <strong>${tasaLabel}</strong> — corresponde a empresas con ${tamanoEmpresa} (${state.trabajadores.length} registrados).</div>
     <div class="table-responsive">
       <table>
         <thead>
@@ -649,7 +665,7 @@ function renderPatronal() {
           </tr>
         </thead>
         <tbody>
-          <tr><td>INSS Patronal</td><td class="num">${fmt(totBruto)}</td><td class="num">22.5%</td><td class="num"><strong>${fmt(totInssPat)}</strong></td></tr>
+          <tr><td>INSS Patronal</td><td class="num">${fmt(totBruto)}</td><td class="num">${tasaLabel}</td><td class="num"><strong>${fmt(totInssPat)}</strong></td></tr>
           <tr><td>INATEC</td><td class="num">${fmt(totBruto)}</td><td class="num">2%</td><td class="num"><strong>${fmt(totInatec)}</strong></td></tr>
           <tr class="total-row"><td>Total cargas patronales (INSS + INATEC)</td><td></td><td></td><td class="num"><strong>${fmt(totCargaPatronal)}</strong></td></tr>
           <tr><td>Provisión Vacaciones</td><td class="num">${fmt(totBruto)}</td><td class="num">8.33%</td><td class="num">${fmt(totVacaciones)}</td></tr>
@@ -767,6 +783,76 @@ function renderAsiento() {
 
 
 // ── CIF ──
+// Clasificador por palabras clave: sugiere comportamiento (Fijo/Variable/Mixto)
+// según el concepto escrito. Es una sugerencia editable, no una clasificación
+// automática infalible — la clasificación final siempre depende del criterio
+// contable de quien usa el sistema.
+const CIF_KEYWORDS = {
+  Fijo: [
+    'alquiler', 'arriendo', 'renta del local', 'depreciacion', 'depreciación',
+    'amortizacion', 'amortización', 'seguro', 'salario', 'sueldo', 'supervisor',
+    'supervisora', 'gerente', 'jefe de planta', 'vigilancia', 'seguridad',
+    'permiso', 'licencia municipal', 'impuesto municipal', 'internet',
+    'telefono fijo', 'teléfono fijo', 'software', 'licencia de software',
+    'arrendamiento', 'renta de equipo', 'cuota fija'
+  ],
+  Variable: [
+    'energia electrica', 'energía eléctrica', 'electricidad', 'combustible',
+    'gasolina', 'diesel', 'diésel', 'materia prima', 'material indirecto',
+    'empaque', 'embalaje', 'transporte de materiales', 'flete', 'comision',
+    'comisión', 'horas extra de produccion', 'agua (produccion)',
+    'insumos', 'lubricantes', 'envases', 'etiquetas', 'cajas'
+  ],
+  Mixto: [
+    'mantenimiento', 'agua', 'telefono', 'teléfono', 'reparacion', 'reparación',
+    'servicios basicos', 'servicios básicos', 'limpieza', 'combustible mixto',
+    'energia (planta)', 'energía (planta)'
+  ]
+};
+
+function sugerirClasifCIF() {
+  const texto = document.getElementById('cif-concepto').value.trim().toLowerCase();
+  const tag  = document.getElementById('cif-sugerencia-tag');
+  const note = document.getElementById('cif-suggestion-note');
+
+  if (!texto) {
+    tag.style.display = 'none';
+    note.style.display = 'none';
+    return;
+  }
+
+  // Quitar acentos para comparar de forma más flexible
+  const normalizar = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const textoNorm = normalizar(texto);
+
+  let mejorMatch = null;
+  let mejorComportamiento = null;
+
+  for (const [comportamiento, palabras] of Object.entries(CIF_KEYWORDS)) {
+    for (const palabra of palabras) {
+      const palabraNorm = normalizar(palabra);
+      if (textoNorm.includes(palabraNorm)) {
+        // Prioriza el match más largo (más específico)
+        if (!mejorMatch || palabraNorm.length > mejorMatch.length) {
+          mejorMatch = palabraNorm;
+          mejorComportamiento = comportamiento;
+        }
+      }
+    }
+  }
+
+  if (mejorComportamiento) {
+    document.getElementById('cif-comp').value = mejorComportamiento;
+    tag.style.display = 'inline';
+    note.style.display = 'flex';
+    note.innerHTML = `<span>💡</span> Sugerido como <strong>${mejorComportamiento}</strong> por la palabra clave "${mejorMatch}". Puedes cambiarlo si no aplica a tu caso.`;
+  } else {
+    tag.style.display = 'none';
+    note.style.display = 'flex';
+    note.innerHTML = `<span>✎</span> No se detectó una palabra clave conocida — selecciona el comportamiento manualmente según tu criterio.`;
+  }
+}
+
 function addCIF() {
   const concepto = document.getElementById('cif-concepto').value.trim();
   const tipo     = document.getElementById('cif-tipo').value;
@@ -781,6 +867,9 @@ function addCIF() {
   state.cifItems.push({ id: Date.now(), concepto, tipo, comp, monto, area, obs });
 
   clearInputs(['cif-concepto','cif-monto','cif-area','cif-obs']);
+  document.getElementById('cif-sugerencia-tag').style.display = 'none';
+  document.getElementById('cif-suggestion-note').style.display = 'none';
+  document.getElementById('cif-comp').value = 'Fijo';
   renderCIF();
   updateDashboard();
   saveState();
@@ -1076,15 +1165,15 @@ function cargarEjemplo() {
   // Nómina
   state.trabajadores = [
     { id: 1, nombre: 'Juan Pérez', cargo: 'Operario', area: 'Producción', clasif: 'MOD',
-      salario: 12000, antiguedad: 500, bonos: 0, jornada: 8, he: 10, factorHE: 1.5,
-      valorHoraOrd: 50, pagoHE: 750, bruto: 13250, inss: 927.5, ir: 0, otras: 130,
-      deducciones: 1057.5, neto: 12192.5,
-      inssPatronal: 2981.25, inatec: 265, vacaciones: 1103.73, aguinaldo: 1103.73 },
+      salario: 12000, antiguedad: 500, bonos: 0, jornada: 8, he: 10,
+      valorHoraOrd: 50, pagoHE: 1000, bruto: 13500, inss: 945, ir: 0, otras: 130,
+      deducciones: 1075, neto: 12425,
+      inssPatronal: 2902.5, inssPatronalPct: 0.215, inatec: 270, vacaciones: 1124.55, aguinaldo: 1124.55 },
     { id: 2, nombre: 'Ana Ruiz', cargo: 'Supervisora', area: 'Producción', clasif: 'MOI',
-      salario: 8000, antiguedad: 0, bonos: 0, jornada: 8, he: 0, factorHE: 1.5,
+      salario: 8000, antiguedad: 0, bonos: 0, jornada: 8, he: 0,
       valorHoraOrd: 33.33, pagoHE: 0, bruto: 8000, inss: 560, ir: 0, otras: 80,
       deducciones: 640, neto: 7360,
-      inssPatronal: 1800, inatec: 160, vacaciones: 666.4, aguinaldo: 666.4 }
+      inssPatronal: 1720, inssPatronalPct: 0.215, inatec: 160, vacaciones: 666.4, aguinaldo: 666.4 }
   ];
 
   // CIF

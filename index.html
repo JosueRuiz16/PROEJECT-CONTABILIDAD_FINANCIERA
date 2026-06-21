@@ -272,15 +272,13 @@
             </div>
           </div>
           <div class="form-section-block" data-num="3">
-            <div class="form-section-title">Horas extras — cálculo automático</div>
+            <div class="form-section-title">Horas extras — recargo legal del 100% (automático)</div>
             <div class="form-grid cols-3">
               <div class="form-group"><label>Jornada diaria (horas)</label><input type="number" id="nom-jornada" min="1" step="1" value="8" oninput="previewDeducciones()"></div>
               <div class="form-group"><label>Cantidad de horas extra</label><input type="number" id="nom-he" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
-              <div class="form-group"><label>Factor de recargo legal</label>
-                <select id="nom-factorhe" onchange="previewDeducciones()">
-                  <option value="1.5">Tiempo y medio (1.5x)</option>
-                  <option value="2">Doble (2x) — feriado/séptimo día</option>
-                </select>
+              <div class="form-group form-group-auto">
+                <label>Recargo legal <span class="auto-tag">Art. 62 CT — 100% fijo</span></label>
+                <div class="auto-value">Doble (2.0×)</div>
               </div>
               <div class="form-group form-group-auto">
                 <label>Valor hora ordinaria <span class="auto-tag">salario÷30÷jornada</span></label>
@@ -348,18 +346,22 @@
           <h1 class="page-title">Costos indirectos de fabricación</h1>
           <p class="page-desc">Registro de CIF adicionales — materiales indirectos y MOI se integran automáticamente</p>
         </div>
-        <div class="info-banner">Los materiales indirectos del inventario y la MOI de nómina se suman automáticamente. Aquí registra los <strong>otros CIF</strong> adicionales como energía, depreciación, mantenimiento.</div>
+        <div class="info-banner">Los materiales indirectos del inventario y la MOI de nómina se suman automáticamente. Aquí registra los <strong>otros CIF</strong> adicionales. Al escribir el concepto, el sistema sugiere si es Fijo, Variable o Mixto — puedes ajustarlo si no aplica a tu caso.</div>
         <div class="card form-card">
           <div class="form-section-block" data-num="1">
             <div class="form-section-title">Concepto CIF</div>
             <div class="form-grid cols-3">
-              <div class="form-group"><label>Concepto</label><input type="text" id="cif-concepto" placeholder="Ej: Energía eléctrica de planta"></div>
+              <div class="form-group"><label>Concepto</label><input type="text" id="cif-concepto" placeholder="Ej: Energía eléctrica de planta" oninput="sugerirClasifCIF()"></div>
               <div class="form-group"><label>Tipo de CIF</label><select id="cif-tipo"><option value="Material indirecto">Material indirecto</option><option value="Mano de obra indirecta">Mano de obra indirecta</option><option value="Otro CIF">Otro CIF</option></select></div>
-              <div class="form-group"><label>Comportamiento</label><select id="cif-comp"><option value="Fijo">Fijo</option><option value="Variable">Variable</option><option value="Mixto">Mixto</option></select></div>
+              <div class="form-group">
+                <label>Comportamiento <span class="auto-tag" id="cif-sugerencia-tag" style="display:none;">sugerido</span></label>
+                <select id="cif-comp"><option value="Fijo">Fijo</option><option value="Variable">Variable</option><option value="Mixto">Mixto</option></select>
+              </div>
               <div class="form-group"><label>Monto (C$)</label><input type="number" id="cif-monto" min="0" step="any" placeholder="0"></div>
               <div class="form-group"><label>Área relacionada</label><input type="text" id="cif-area" placeholder="Producción..."></div>
               <div class="form-group"><label>Observación</label><input type="text" id="cif-obs" placeholder="Breve descripción..."></div>
             </div>
+            <div class="cif-suggestion-note" id="cif-suggestion-note" style="display:none;"></div>
           </div>
           <div class="form-actions"><button class="btn-primary" onclick="addCIF()">+ Agregar CIF</button></div>
         </div>
