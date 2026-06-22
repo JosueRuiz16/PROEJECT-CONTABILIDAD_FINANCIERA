@@ -1,6 +1,6 @@
 /* ============================================
-   SISTECOSTOS — CSS v4
-   Paleta: Dark verde esmeralda
+   SISTECOSTOS — CSS v5
+   Paleta: Dark verde esmeralda (default) + Light theme
    Tipo: Space Grotesk + Inter
    Inputs: línea inferior (auditoría)
    ============================================ */
@@ -38,6 +38,7 @@
   --purple:   #c084fc;
   --purple-lt:rgba(192,132,252,0.11);
 
+  --shadow-card: none;
   --topbar-h:     56px;
   --bottom-nav-h: 62px;
   --radius:       6px;
@@ -45,6 +46,58 @@
 
   --font-head: 'Space Grotesk', sans-serif;
   --font-body: 'Inter', sans-serif;
+}
+
+/* ── TEMA CLARO ── */
+[data-theme="light"] {
+  --accent:       #1f9d63;
+  --accent-dim:   #178550;
+  --accent-dark:  rgba(31,157,99,0.08);
+  --accent-glow:  rgba(31,157,99,0.18);
+  --accent-border:rgba(31,157,99,0.25);
+
+  --bg:       #f4f7f5;
+  --bg2:      #ffffff;
+  --bg3:      #eaf1ec;
+  --surface:  #ffffff;
+  --surface2: #edf3ef;
+
+  --border:   rgba(15,30,20,0.09);
+  --border2:  rgba(15,30,20,0.14);
+
+  --text:     #15201a;
+  --text2:    #56685e;
+  --text3:    #93a59b;
+
+  --blue:     #2563eb;
+  --blue-lt:  rgba(37,99,235,0.09);
+  --green:    #1f9d63;
+  --green-lt: rgba(31,157,99,0.10);
+  --orange:   #c2622e;
+  --orange-lt:rgba(194,98,46,0.10);
+  --red:      #d23f3f;
+  --red-lt:   rgba(210,63,63,0.10);
+  --purple:   #7c3aed;
+  --purple-lt:rgba(124,58,237,0.10);
+
+  --shadow-card: 0 1px 3px rgba(15,30,20,0.06), 0 1px 2px rgba(15,30,20,0.04);
+}
+
+[data-theme="light"] .card,
+[data-theme="light"] .kpi-card,
+[data-theme="light"] .rep-kpi,
+[data-theme="light"] .reporte-table-card,
+[data-theme="light"] .rep-unit-card,
+[data-theme="light"] .cif-breakdown {
+  box-shadow: var(--shadow-card);
+}
+
+[data-theme="light"] .topbar {
+  background: rgba(244,247,245,0.92);
+}
+
+[data-theme="light"] .bottom-nav {
+  background: rgba(255,255,255,0.97);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -56,6 +109,64 @@ body {
   color: var(--text);
   min-height: 100vh;
   line-height: 1.6;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+body, .card, .kpi-card, .topbar, .bottom-nav, .surface, input, select, textarea,
+.reporte-table-card, .rep-kpi, .rep-unit-card, .cif-breakdown, .form-group {
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+}
+
+/* ── THEME TOGGLE BUTTON ── */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.theme-toggle:hover {
+  border-color: var(--accent-border);
+  color: var(--accent);
+  background: var(--accent-dark);
+}
+
+/* ── CHART CONTAINERS (Dashboard) ── */
+.chart-wrap {
+  position: relative;
+  height: 220px;
+  margin-top: 4px;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 14px;
+  font-size: 12px;
+}
+
+.chart-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text2);
+}
+
+.chart-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }

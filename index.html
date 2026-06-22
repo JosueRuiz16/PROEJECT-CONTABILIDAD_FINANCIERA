@@ -3,10 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SisteCostos — Control de Producción</title>
+  <title>CostFlow — Control de Producción</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="x-icon" href="favicon.ico">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <script>
+    (function() {
+      var saved = localStorage.getItem('costflow_theme') || 'dark';
+      if (saved === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    })();
+  </script>
 </head>
 <body>
 
@@ -55,7 +62,7 @@
   <div class="topbar-brand">
     <img src="uni2.png" alt="Logo" class="brand-icon-img" style="width:80px;height:48px;">
     <div>
-      <div class="brand-name">Sistema de Costos :)</div>
+      <div class="brand-name">CostFlow :)</div>
       <div class="brand-welcome" id="brand-welcome">Bienvenido</div>
     </div>
 </div>
@@ -69,17 +76,10 @@
       <a class="tnav" href="#" onclick="showPage('flujo'); return false;">Flujo</a>
     </nav>
     <div style="display:flex;align-items:center;gap:10px;">
+      <button class="theme-toggle" onclick="toggleTheme()" title="Cambiar tema" id="theme-toggle-btn">🌙</button>
       <button class="btn-accent" onclick="showPage('reporte'); return false;">Generar reporte →</button>
       <button class="btn-logout" onclick="doLogout()" title="Cerrar sesión">⎋</button>
     </div>
-  </header>
-      <a class="tnav" href="#" onclick="showPage('inventario'); return false;">Inventario</a>
-      <a class="tnav" href="#" onclick="showPage('nomina'); return false;">Nómina</a>
-      <a class="tnav" href="#" onclick="showPage('cif'); return false;">CIF</a>
-      <a class="tnav" href="#" onclick="showPage('reporte'); return false;">Reporte</a>
-      <a class="tnav" href="#" onclick="showPage('flujo'); return false;">Flujo</a>
-    </nav>
-    <button class="btn-accent" onclick="showPage('reporte'); return false;">Generar reporte →</button>
   </header>
 
   <main class="main">
@@ -164,6 +164,22 @@
             <button class="btn-clear-all" onclick="clearAllData()">✕ Borrar todos los datos</button>
           </div>
         </div>
+
+        <div class="two-col">
+          <div class="card">
+            <div class="card-head"><span class="card-title">Composición del costo de producción</span></div>
+            <div class="chart-wrap">
+              <canvas id="chart-composicion"></canvas>
+            </div>
+            <div class="chart-legend" id="chart-composicion-legend"></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="card-title">Elementos del costo — comparativo</span></div>
+            <div class="chart-wrap">
+              <canvas id="chart-comparativo"></canvas>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- ══════════════ EMPRESA ══════════════ -->
@@ -225,7 +241,28 @@
           <div class="form-section-block" data-num="2">
             <div class="form-section-title">Cantidades y costo</div>
             <div class="form-grid cols-3">
-              <div class="form-group"><label>Unidad de medida</label><input type="text" id="inv-unidad" placeholder="tabla, kg, m..."></div>
+              <div class="form-group"><label>Unidad de medida</label>
+                <select id="inv-unidad">
+                  <option value="Unidad">Unidad</option>
+                  <option value="Tablas">Tablas</option>
+                  <option value="Kg">Kilogramos (kg)</option>
+                  <option value="g">Gramos (g)</option>
+                  <option value="Lb">Libras (lb)</option>
+                  <option value="m">Metros (m)</option>
+                  <option value="m2">Metros cuadrados (m²)</option>
+                  <option value="cm">Centímetros (cm)</option>
+                  <option value="L">Litros (L)</option>
+                  <option value="ml">Mililitros (ml)</option>
+                  <option value="gal">Galones</option>
+                  <option value="Lote">Lote</option>
+                  <option value="Caja">Caja</option>
+                  <option value="Saco">Saco</option>
+                  <option value="Rollo">Rollo</option>
+                  <option value="Par">Par</option>
+                  <option value="Docena">Docena</option>
+                  <option value="Otro">Otro</option>
+                </select>
+              </div>
               <div class="form-group"><label>Cantidad disponible</label><input type="number" id="inv-disponible" min="0" step="any" placeholder="0"></div>
               <div class="form-group"><label>Cantidad consumida</label><input type="number" id="inv-cantidad" min="0" step="any" placeholder="0"></div>
               <div class="form-group"><label>Costo unitario (C$)</label><input type="number" id="inv-costounit" min="0" step="any" placeholder="0"></div>
@@ -508,6 +545,7 @@
 
   </div><!-- /app-shell -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

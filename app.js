@@ -126,6 +126,36 @@ function clearInputs(ids) {
   });
 }
 
+// ── TEMA CLARO / OSCURO ──
+const THEME_KEY = 'sistecostos_theme';
+
+function applyTheme(theme) {
+  if (theme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+  }
+  const btn = document.getElementById('theme-toggle-btn');
+  if (btn) btn.textContent = theme === 'light' ? '☀' : '🌙';
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  const next = current === 'light' ? 'dark' : 'light';
+  applyTheme(next);
+  localStorage.setItem(THEME_KEY, next);
+
+  // Si hay gráficas activas, redibujarlas con los colores del nuevo tema
+  if (typeof renderDashboardCharts === 'function') {
+    setTimeout(renderDashboardCharts, 50);
+  }
+}
+
+function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY) || 'dark';
+  applyTheme(saved);
+}
+
 // ── NAVEGACIÓN ──
 function showPage(name) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -208,6 +238,8 @@ function updateDashboard() {
     state.cifItems.length > 0 || mi > 0 || moi > 0,
     state.cifItems.length + ' conceptos adicionales' + (mi + moi > 0 ? ' + auto desde módulos' : ''),
     false);
+
+  renderDashboardCharts({ md, mod, totalCIF, cifExtra, cifItems: state.cifItems });
 }
 
 function updateModuleStatus(cardId, detailId, ok, detail, partial) {
@@ -226,6 +258,121 @@ function updateModuleStatus(cardId, detailId, ok, detail, partial) {
     badge.className = 'status-badge badge-pending';
     badge.textContent = 'Pendiente';
   }
+}
+
+// ── GRÁFICAS DEL DASHBOARD ──
+let chartComposicion = null;
+let chartComparativo = null;
+
+function getChartColors() {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  return {
+    text: isLight ? '#56685e' : '#7a8e7e',
+    grid: isLight ? 'rgba(15,30,20,0.08)' : 'rgba(255,255,255,0.06)',
+    md: isLight ? '#2563eb' : '#5b9cf6',
+    mod: isLight ? '#1f9d63' : '#4ecb8d',
+    cif: isLight ? '#c2622e' : '#fb923c',
+  };
+}
+
+function renderDashboardCharts({ md, mod, totalCIF, cifExtra, cifItems }) {
+  const canvasComp = document.getElementById('chart-composicion');
+  const canvasComp2 = document.getElementById('chart-comparativo');
+  if (!canvasComp || !canvasComp2 || typeof Chart === 'undefined') return;
+
+  const colors = getChartColors();
+  const hayDatos = (md + mod + totalCIF) > 0;
+
+  // ── Gráfica 1: composición (dona) MD / MOD / CIF ──
+  if (chartComposicion) chartComposicion.destroy();
+  const legendEl = document.getElementById('chart-composicion-legend');
+
+  if (!hayDatos) {
+    canvasComp.getContext('2d').clearRect(0, 0, canvasComp.width, canvasComp.height);
+    if (legendEl) legendEl.innerHTML = '<span style="color:var(--text3); font-size:12px;">Sin datos registrados todavía</span>';
+  } else {
+    chartComposicion = new Chart(canvasComp, {
+      type: 'doughnut',
+      data: {
+        labels: ['Material directo', 'Mano de obra directa', 'CIF'],
+        datasets: [{
+          data: [md, mod, totalCIF],
+          backgroundColor: [colors.md, colors.mod, colors.cif],
+          borderWidth: 0,
+          hoverOffset: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '68%',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const total = md + mod + totalCIF;
+                const pctVal = total > 0 ? ((ctx.raw / total) * 100).toFixed(1) : 0;
+                return ` ${ctx.label}: ${fmt(ctx.raw)} (${pctVal}%)`;
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (legendEl) {
+      const total = md + mod + totalCIF;
+      const items = [
+        { label: 'Material directo', value: md, color: colors.md },
+        { label: 'Mano de obra directa', value: mod, color: colors.mod },
+        { label: 'CIF', value: totalCIF, color: colors.cif }
+      ];
+      legendEl.innerHTML = items.map(it => {
+        const p = total > 0 ? ((it.value / total) * 100).toFixed(1) : 0;
+        return `<span class="chart-legend-item"><span class="chart-legend-dot" style="background:${it.color}"></span>${it.label} — ${p}%</span>`;
+      }).join('');
+    }
+  }
+
+  // ── Gráfica 2: comparativo (barras) MD / MOD / CIF en córdobas ──
+  if (chartComparativo) chartComparativo.destroy();
+  chartComparativo = new Chart(canvasComp2, {
+    type: 'bar',
+    data: {
+      labels: ['Material directo', 'Mano de obra directa', 'CIF'],
+      datasets: [{
+        data: [md, mod, totalCIF],
+        backgroundColor: [colors.md, colors.mod, colors.cif],
+        borderRadius: 6,
+        maxBarThickness: 56
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: { label: (ctx) => ' ' + fmt(ctx.raw) }
+        }
+      },
+      scales: {
+        x: {
+          ticks: { color: colors.text, font: { size: 11 } },
+          grid: { display: false }
+        },
+        y: {
+          ticks: {
+            color: colors.text,
+            font: { size: 10 },
+            callback: (v) => fmt(v)
+          },
+          grid: { color: colors.grid }
+        }
+      }
+    }
+  });
 }
 
 // ── EMPRESA ──
@@ -271,7 +418,8 @@ function addMaterial() {
   const total = cantidad * costoUnit;
   state.materiales.push({ id: Date.now(), codigo, nombre, tipo, unidad, disponible, cantidad, costoUnit, total });
 
-  clearInputs(['inv-codigo','inv-nombre','inv-unidad','inv-disponible','inv-cantidad','inv-costounit']);
+  clearInputs(['inv-codigo','inv-nombre','inv-disponible','inv-cantidad','inv-costounit']);
+  document.getElementById('inv-unidad').value = 'Unidad';
   document.getElementById('inv-tipo').value = 'Directo';
   document.getElementById('inv-sugerencia-tag').style.display = 'none';
   document.getElementById('inv-suggestion-note').style.display = 'none';
@@ -1401,6 +1549,8 @@ function cargarEjemplo() {
 
 // ── INIT ──
 document.addEventListener("DOMContentLoaded", () => {
+  initTheme();
+
   // Verificar sesión activa
   const savedUser   = sessionStorage.getItem("sc_user");
   const savedNombre = sessionStorage.getItem("sc_nombre");
