@@ -214,9 +214,13 @@
             <div class="form-section-title">Datos del material</div>
             <div class="form-grid cols-3">
               <div class="form-group"><label>Código</label><input type="text" id="inv-codigo" placeholder="MD-001"></div>
-              <div class="form-group"><label>Nombre del material</label><input type="text" id="inv-nombre" placeholder="Ej: Madera de pino"></div>
-              <div class="form-group"><label>Tipo</label><select id="inv-tipo"><option value="Directo">Material directo</option><option value="Indirecto">Material indirecto</option></select></div>
+              <div class="form-group"><label>Nombre del material</label><input type="text" id="inv-nombre" placeholder="Ej: Madera de pino" oninput="sugerirClasifInventario()"></div>
+              <div class="form-group">
+                <label>Tipo <span class="auto-tag" id="inv-sugerencia-tag" style="display:none;">sugerido</span></label>
+                <select id="inv-tipo"><option value="Directo">Material directo</option><option value="Indirecto">Material indirecto</option></select>
+              </div>
             </div>
+            <div class="cif-suggestion-note" id="inv-suggestion-note" style="display:none;"></div>
           </div>
           <div class="form-section-block" data-num="2">
             <div class="form-section-title">Cantidades y costo</div>
@@ -259,16 +263,31 @@
             <div class="form-section-title">Datos del trabajador</div>
             <div class="form-grid cols-3">
               <div class="form-group"><label>Nombre completo</label><input type="text" id="nom-nombre" placeholder="Nombre del trabajador"></div>
-              <div class="form-group"><label>Cargo</label><input type="text" id="nom-cargo" placeholder="Operario, Supervisor..."></div>
-              <div class="form-group"><label>Área</label><input type="text" id="nom-area" placeholder="Producción, Bodega..."></div>
+              <div class="form-group"><label>Cargo</label><input type="text" id="nom-cargo" placeholder="Operario, Supervisor..." oninput="sugerirClasifNomina()"></div>
+              <div class="form-group"><label>Área</label><input type="text" id="nom-area" placeholder="Producción, Bodega..." oninput="sugerirClasifNomina()"></div>
             </div>
           </div>
           <div class="form-section-block" data-num="2">
             <div class="form-section-title">Salario, antigüedad y bonos</div>
             <div class="form-grid cols-3">
               <div class="form-group"><label>Salario base mensual (C$)</label><input type="number" id="nom-salario" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
-              <div class="form-group"><label>Antigüedad (C$)</label><input type="number" id="nom-antiguedad" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
+              <div class="form-group"><label>Fecha de ingreso</label><input type="date" id="nom-fecha-ingreso" oninput="previewDeducciones()"></div>
               <div class="form-group"><label>Bonos regulares (C$)</label><input type="number" id="nom-bonos" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
+              <div class="form-group form-group-auto">
+                <label>Años de servicio <span class="auto-tag">auto</span></label>
+                <div class="auto-value" id="nom-anios-servicio-display">0 años</div>
+              </div>
+              <div class="form-group form-group-auto">
+                <label>% antigüedad <span class="auto-tag">tabla ref.</span></label>
+                <div class="auto-value" id="nom-pct-antiguedad-display">0%</div>
+              </div>
+              <div class="form-group form-group-auto">
+                <label>Monto antigüedad (C$) <span class="auto-tag">auto</span></label>
+                <div class="auto-value" id="nom-antiguedad-display">C$ 0</div>
+              </div>
+            </div>
+            <div class="cif-suggestion-note" style="display:flex;">
+              <span>ℹ</span> Tabla de referencia: 2–5 años → 2%, 5–10 → 5%, 10–15 → 8%, 15–20 → 10%, +20 → 15% sobre el salario base.
             </div>
           </div>
           <div class="form-section-block" data-num="3">
@@ -306,8 +325,12 @@
                 <div class="auto-value" id="nom-ir-display">C$ 0</div>
               </div>
               <div class="form-group"><label>Otras deducciones (C$)</label><input type="number" id="nom-otras" min="0" step="any" placeholder="0" oninput="previewDeducciones()"></div>
-              <div class="form-group"><label>Clasificación contable / Departamento</label><select id="nom-clasif" onchange="previewDeducciones()"><option value="MOD">Mano de obra directa (MOD) — Producción</option><option value="MOI">Mano de obra indirecta (MOI) — Producción</option><option value="Gasto administrativo">Gasto administrativo — Administración</option><option value="Gasto de venta">Gasto de venta — Ventas</option></select></div>
+              <div class="form-group">
+                <label>Clasificación contable / Departamento <span class="auto-tag" id="nom-sugerencia-tag" style="display:none;">sugerido</span></label>
+                <select id="nom-clasif" onchange="previewDeducciones()"><option value="MOD">Mano de obra directa (MOD) — Producción</option><option value="MOI">Mano de obra indirecta (MOI) — Producción</option><option value="Gasto administrativo">Gasto administrativo — Administración</option><option value="Gasto de venta">Gasto de venta — Ventas</option></select>
+              </div>
             </div>
+            <div class="cif-suggestion-note" id="nom-suggestion-note" style="display:none;"></div>
             <div class="deducciones-preview" id="deducciones-preview">
               <span>Salario neto a recibir (estimado)</span>
               <strong id="nom-deduc-total-preview">C$ 0</strong>
@@ -484,7 +507,7 @@
   <div class="toast" id="toast"></div>
 
   </div><!-- /app-shell -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -272,6 +272,9 @@ function addMaterial() {
   state.materiales.push({ id: Date.now(), codigo, nombre, tipo, unidad, disponible, cantidad, costoUnit, total });
 
   clearInputs(['inv-codigo','inv-nombre','inv-unidad','inv-disponible','inv-cantidad','inv-costounit']);
+  document.getElementById('inv-tipo').value = 'Directo';
+  document.getElementById('inv-sugerencia-tag').style.display = 'none';
+  document.getElementById('inv-suggestion-note').style.display = 'none';
   renderInventario();
   updateDashboard();
   saveState();
@@ -400,7 +403,7 @@ const INSS_PATRONAL_PYME = 0.215;  // 21.5% — empresas con 50 trabajadores o m
 const INATEC_PCT         = 0.02;   // 2% sobre salario bruto
 const VACACIONES_PCT     = 0.0833; // 8.33% (1 mes / 12)
 const AGUINALDO_PCT      = 0.0833; // 8.33% (1 mes / 12)
-const IR_EXENTO_ANUAL    = 200000; // C$200,000 exentos al año (C$16,666.67 mensual)
+const IR_EXENTO_ANUAL    = 100000; // C$100,000 exentos al año según tabla oficial (ver calcIR)
 const RECARGO_HE_LEGAL   = 2.0;    // Art. 62 Código del Trabajo: 100% de recargo = pago doble, fijo por ley
 
 function calcInss(bruto) {
@@ -413,33 +416,84 @@ function getInssPatronalPct() {
   return numEmpleados > 50 ? INSS_PATRONAL_PCT : INSS_PATRONAL_PYME;
 }
 
-// Tabla progresiva de IR (renta del trabajo) sobre base imponible MENSUAL.
-// Exento anual C$200,000 (C$16,666.67/mes), tramos progresivos sobre el excedente
-// según la estructura vigente de la Ley de Concertación Tributaria.
+// Tabla progresiva de IR (renta del trabajo) sobre base imponible MENSUAL,
+// según la tabla oficial de Estratos de Renta Neta Anual (Ley de Concertación
+// Tributaria, Nicaragua):
+//   C$0.01 – 100,000.00      → 0.00 base, 0% sobre exceso de 0
+//   100,000.01 – 200,000.00  → 0.00 base, 15% sobre exceso de 100,000
+//   200,000.01 – 350,000.00  → 15,000.00 base, 20% sobre exceso de 200,000
+//   350,000.01 – 500,000.00  → 45,000.00 base, 25% sobre exceso de 350,000
+//   500,000.01 a más         → 82,500.00 base, 30% sobre exceso de 500,000
 function calcIR(brutoMensual, inssMensual) {
   const baseImponible = brutoMensual - inssMensual;
   const baseAnual = baseImponible * 12;
 
   let irAnual = 0;
-  if (baseAnual <= IR_EXENTO_ANUAL) {
+  if (baseAnual <= 100000) {
     irAnual = 0;
+  } else if (baseAnual <= 200000) {
+    irAnual = 0 + (baseAnual - 100000) * 0.15;
   } else if (baseAnual <= 350000) {
-    irAnual = (baseAnual - IR_EXENTO_ANUAL) * 0.15;
+    irAnual = 15000 + (baseAnual - 200000) * 0.20;
   } else if (baseAnual <= 500000) {
-    irAnual = 22500 + (baseAnual - 350000) * 0.20;
-  } else if (baseAnual <= 1000000) {
-    irAnual = 52500 + (baseAnual - 500000) * 0.25;
+    irAnual = 45000 + (baseAnual - 350000) * 0.25;
   } else {
-    irAnual = 177500 + (baseAnual - 1000000) * 0.30;
+    irAnual = 82500 + (baseAnual - 500000) * 0.30;
   }
   return irAnual / 12;
+}
+
+// Tabla fija de referencia para el complemento por antigüedad ("quinquenio"),
+// sobre el salario base, según años de servicio. No es una obligación legal
+// nicaragüense (cada empresa define la suya), se usa como tabla de referencia
+// común en convenios colectivos para automatizar el cálculo:
+//   0–2 años   → 0%
+//   2–5 años   → 2%
+//   5–10 años  → 5%
+//   10–15 años → 8%
+//   15–20 años → 10%
+//   +20 años   → 15%
+const TABLA_ANTIGUEDAD = [
+  { minAnios: 20, pct: 0.15 },
+  { minAnios: 15, pct: 0.10 },
+  { minAnios: 10, pct: 0.08 },
+  { minAnios: 5,  pct: 0.05 },
+  { minAnios: 2,  pct: 0.02 },
+  { minAnios: 0,  pct: 0 }
+];
+
+function calcAniosServicio(fechaIngreso) {
+  if (!fechaIngreso) return 0;
+  const ingreso = new Date(fechaIngreso);
+  if (isNaN(ingreso.getTime())) return 0;
+  const hoy = new Date();
+  let anios = hoy.getFullYear() - ingreso.getFullYear();
+  const aunNoCumple = (hoy.getMonth() < ingreso.getMonth()) ||
+    (hoy.getMonth() === ingreso.getMonth() && hoy.getDate() < ingreso.getDate());
+  if (aunNoCumple) anios -= 1;
+  return Math.max(0, anios);
+}
+
+function calcPctAntiguedad(anios) {
+  for (const tramo of TABLA_ANTIGUEDAD) {
+    if (anios >= tramo.minAnios) return tramo.pct;
+  }
+  return 0;
+}
+
+function calcAntiguedad(salario, fechaIngreso) {
+  const anios = calcAniosServicio(fechaIngreso);
+  const pct = calcPctAntiguedad(anios);
+  return { anios, pct, monto: salario * pct };
 }
 
 // Devuelve todos los cálculos derivados de los valores actuales del formulario / trabajador.
 // El recargo de horas extra es FIJO por ley (100% = doble), no editable, según Art. 62 del
 // Código del Trabajo de Nicaragua: toda hora extra se paga al doble del valor de la hora ordinaria,
 // sin distinción entre día normal, séptimo día o feriado.
-function calcNomina({ salario, antiguedad, bonos, jornada, he, otras }) {
+function calcNomina({ salario, fechaIngreso, bonos, jornada, he, otras }) {
+  const antig = calcAntiguedad(salario, fechaIngreso);
+  const antiguedad = antig.monto;
   const valorHoraOrd = jornada > 0 ? (salario / 30) / jornada : 0;
   const pagoHE  = he * valorHoraOrd * RECARGO_HE_LEGAL;
   const bruto   = salario + antiguedad + bonos + pagoHE;
@@ -455,17 +509,21 @@ function calcNomina({ salario, antiguedad, bonos, jornada, he, otras }) {
   const vacaciones    = bruto * VACACIONES_PCT;
   const aguinaldo      = bruto * AGUINALDO_PCT;
 
-  return { valorHoraOrd, pagoHE, bruto, inss, ir, deducciones, neto, inssPatronal, inssPatronalPct, inatec, vacaciones, aguinaldo };
+  return {
+    antiguedad, aniosServicio: antig.anios, pctAntiguedad: antig.pct,
+    valorHoraOrd, pagoHE, bruto, inss, ir, deducciones, neto,
+    inssPatronal, inssPatronalPct, inatec, vacaciones, aguinaldo
+  };
 }
 
 function readNomFormValues() {
   return {
-    salario:    parseFloat(document.getElementById('nom-salario').value) || 0,
-    antiguedad: parseFloat(document.getElementById('nom-antiguedad').value) || 0,
-    bonos:      parseFloat(document.getElementById('nom-bonos').value) || 0,
-    jornada:    parseFloat(document.getElementById('nom-jornada').value) || 8,
-    he:         parseFloat(document.getElementById('nom-he').value) || 0,
-    otras:      parseFloat(document.getElementById('nom-otras').value) || 0
+    salario:      parseFloat(document.getElementById('nom-salario').value) || 0,
+    fechaIngreso: document.getElementById('nom-fecha-ingreso').value || '',
+    bonos:        parseFloat(document.getElementById('nom-bonos').value) || 0,
+    jornada:      parseFloat(document.getElementById('nom-jornada').value) || 8,
+    he:           parseFloat(document.getElementById('nom-he').value) || 0,
+    otras:        parseFloat(document.getElementById('nom-otras').value) || 0
   };
 }
 
@@ -473,6 +531,9 @@ function previewDeducciones() {
   const vals = readNomFormValues();
   const c = calcNomina(vals);
 
+  document.getElementById('nom-anios-servicio-display').textContent = c.aniosServicio + (c.aniosServicio === 1 ? ' año' : ' años');
+  document.getElementById('nom-pct-antiguedad-display').textContent = (c.pctAntiguedad * 100).toFixed(0) + '%';
+  document.getElementById('nom-antiguedad-display').textContent     = fmt(c.antiguedad);
   document.getElementById('nom-valhora-display').textContent   = fmt(c.valorHoraOrd);
   document.getElementById('nom-pagohe-display').textContent    = fmt(c.pagoHE);
   document.getElementById('nom-bruto-display').textContent     = fmt(c.bruto);
@@ -495,8 +556,9 @@ function addTrabajador() {
 
   state.trabajadores.push({
     id: Date.now(), nombre, cargo, area, clasif,
-    salario: vals.salario, antiguedad: vals.antiguedad, bonos: vals.bonos,
-    jornada: vals.jornada, he: vals.he,
+    salario: vals.salario, fechaIngreso: vals.fechaIngreso,
+    antiguedad: c.antiguedad, aniosServicio: c.aniosServicio, pctAntiguedad: c.pctAntiguedad,
+    bonos: vals.bonos, jornada: vals.jornada, he: vals.he,
     valorHoraOrd: c.valorHoraOrd, pagoHE: c.pagoHE,
     bruto: c.bruto, inss: c.inss, ir: c.ir, otras: vals.otras,
     deducciones: c.deducciones, neto: c.neto,
@@ -504,8 +566,14 @@ function addTrabajador() {
     vacaciones: c.vacaciones, aguinaldo: c.aguinaldo
   });
 
-  clearInputs(['nom-nombre','nom-cargo','nom-area','nom-salario','nom-antiguedad','nom-bonos','nom-he','nom-otras']);
+  clearInputs(['nom-nombre','nom-cargo','nom-area','nom-salario','nom-fecha-ingreso','nom-bonos','nom-he','nom-otras']);
   document.getElementById('nom-jornada').value = 8;
+  document.getElementById('nom-clasif').value = 'MOD';
+  document.getElementById('nom-sugerencia-tag').style.display = 'none';
+  document.getElementById('nom-suggestion-note').style.display = 'none';
+  document.getElementById('nom-anios-servicio-display').textContent = '0 años';
+  document.getElementById('nom-pct-antiguedad-display').textContent = '0%';
+  document.getElementById('nom-antiguedad-display').textContent     = 'C$ 0';
   document.getElementById('nom-valhora-display').textContent = 'C$ 0';
   document.getElementById('nom-pagohe-display').textContent  = 'C$ 0';
   document.getElementById('nom-bruto-display').textContent   = 'C$ 0';
@@ -569,7 +637,10 @@ function renderNomina() {
       <td>${t.nombre}</td>
       <td>${t.cargo || '—'}</td>
       <td class="num">${fmt(t.salario)}</td>
-      <td class="num">${t.antiguedad > 0 ? fmt(t.antiguedad) : '—'}</td>
+      <td class="num">
+        ${t.antiguedad > 0 ? fmt(t.antiguedad) : '<span style="color:var(--text3);">C$ 0</span>'}
+        <div style="font-size:9.5px; color:var(--text3); margin-top:1px;">${t.aniosServicio || 0} ${(t.aniosServicio === 1) ? 'año' : 'años'} · ${((t.pctAntiguedad || 0) * 100).toFixed(0)}%</div>
+      </td>
       <td class="num">${t.pagoHE > 0 ? fmt(t.pagoHE) : '—'}</td>
       <td class="num"><strong>${fmt(t.bruto)}</strong></td>
       <td class="num">${fmt(t.inss)}</td>
@@ -782,6 +853,34 @@ function renderAsiento() {
 }
 
 
+// ── CLASIFICADOR GENÉRICO POR PALABRAS CLAVE ──
+// Función reutilizable: recibe un texto y un diccionario {categoria: [palabras]}
+// y devuelve la categoría sugerida según el match más específico (palabra más larga).
+// Es siempre una sugerencia editable, nunca una clasificación definitiva — el criterio
+// contable final depende de quien usa el sistema.
+function normalizarTexto(s) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+function matchKeyword(texto, diccionario) {
+  const textoNorm = normalizarTexto(texto.toLowerCase());
+  let mejorMatch = null;
+  let mejorCategoria = null;
+
+  for (const [categoria, palabras] of Object.entries(diccionario)) {
+    for (const palabra of palabras) {
+      const palabraNorm = normalizarTexto(palabra);
+      if (textoNorm.includes(palabraNorm)) {
+        if (!mejorMatch || palabraNorm.length > mejorMatch.length) {
+          mejorMatch = palabraNorm;
+          mejorCategoria = categoria;
+        }
+      }
+    }
+  }
+  return mejorCategoria ? { categoria: mejorCategoria, palabra: mejorMatch } : null;
+}
+
 // ── CIF ──
 // Clasificador por palabras clave: sugiere comportamiento (Fijo/Variable/Mixto)
 // según el concepto escrito. Es una sugerencia editable, no una clasificación
@@ -811,7 +910,7 @@ const CIF_KEYWORDS = {
 };
 
 function sugerirClasifCIF() {
-  const texto = document.getElementById('cif-concepto').value.trim().toLowerCase();
+  const texto = document.getElementById('cif-concepto').value.trim();
   const tag  = document.getElementById('cif-sugerencia-tag');
   const note = document.getElementById('cif-suggestion-note');
 
@@ -821,35 +920,125 @@ function sugerirClasifCIF() {
     return;
   }
 
-  // Quitar acentos para comparar de forma más flexible
-  const normalizar = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const textoNorm = normalizar(texto);
+  const resultado = matchKeyword(texto, CIF_KEYWORDS);
 
-  let mejorMatch = null;
-  let mejorComportamiento = null;
-
-  for (const [comportamiento, palabras] of Object.entries(CIF_KEYWORDS)) {
-    for (const palabra of palabras) {
-      const palabraNorm = normalizar(palabra);
-      if (textoNorm.includes(palabraNorm)) {
-        // Prioriza el match más largo (más específico)
-        if (!mejorMatch || palabraNorm.length > mejorMatch.length) {
-          mejorMatch = palabraNorm;
-          mejorComportamiento = comportamiento;
-        }
-      }
-    }
-  }
-
-  if (mejorComportamiento) {
-    document.getElementById('cif-comp').value = mejorComportamiento;
+  if (resultado) {
+    document.getElementById('cif-comp').value = resultado.categoria;
     tag.style.display = 'inline';
     note.style.display = 'flex';
-    note.innerHTML = `<span>💡</span> Sugerido como <strong>${mejorComportamiento}</strong> por la palabra clave "${mejorMatch}". Puedes cambiarlo si no aplica a tu caso.`;
+    note.innerHTML = `<span>💡</span> Sugerido como <strong>${resultado.categoria}</strong> por la palabra clave "${resultado.palabra}". Puedes cambiarlo si no aplica a tu caso.`;
   } else {
     tag.style.display = 'none';
     note.style.display = 'flex';
     note.innerHTML = `<span>✎</span> No se detectó una palabra clave conocida — selecciona el comportamiento manualmente según tu criterio.`;
+  }
+}
+
+// ── CLASIFICADOR DE NÓMINA ──
+// Sugiere MOD / MOI / Gasto administrativo / Gasto de venta según el cargo y/o área
+// escritos. MOD y MOI requieren además trabajar en producción para tener sentido
+// contable, así que se valida el área cuando es ambigua.
+const NOMINA_KEYWORDS = {
+  MOD: [
+    'operario', 'operaria', 'obrero', 'obrera', 'soldador', 'soldadora',
+    'carpintero', 'carpintera', 'ensamblador', 'ensambladora', 'costurera',
+    'costurero', 'tejedor', 'tejedora', 'cortador', 'cortadora', 'pintor de produccion',
+    'maquinista', 'tornero', 'tornera', 'montador', 'montadora', 'empacador',
+    'empacadora', 'tapicero', 'tapicera'
+  ],
+  MOI: [
+    'supervisor', 'supervisora', 'jefe de produccion', 'jefe de planta',
+    'encargado de bodega', 'encargada de bodega', 'bodeguero', 'bodeguera',
+    'control de calidad', 'inspector de calidad', 'inspectora de calidad',
+    'mantenimiento', 'tecnico de mantenimiento', 'técnico de mantenimiento',
+    'vigilante de planta', 'limpieza de planta'
+  ],
+  'Gasto administrativo': [
+    'contador', 'contadora', 'gerente general', 'recepcionista', 'secretaria',
+    'secretario', 'auxiliar administrativo', 'auxiliar administrativa',
+    'recursos humanos', 'asistente administrativo', 'asistente administrativa',
+    'gerente administrativo', 'conserje', 'guardia de oficina', 'mensajero',
+    'mensajera'
+  ],
+  'Gasto de venta': [
+    'vendedor', 'vendedora', 'cajero', 'cajera', 'promotor', 'promotora',
+    'asesor de ventas', 'asesora de ventas', 'gerente de ventas', 'comercial',
+    'representante de ventas', 'impulsador', 'impulsadora', 'community manager',
+    'marketing'
+  ]
+};
+
+function sugerirClasifNomina() {
+  const cargo = document.getElementById('nom-cargo').value.trim();
+  const area  = document.getElementById('nom-area').value.trim();
+  const tag   = document.getElementById('nom-sugerencia-tag');
+  const note  = document.getElementById('nom-suggestion-note');
+
+  const texto = (cargo + ' ' + area).trim();
+  if (!texto) {
+    tag.style.display = 'none';
+    note.style.display = 'none';
+    return;
+  }
+
+  const resultado = matchKeyword(texto, NOMINA_KEYWORDS);
+
+  if (resultado) {
+    document.getElementById('nom-clasif').value = resultado.categoria;
+    previewDeducciones();
+    tag.style.display = 'inline';
+    note.style.display = 'flex';
+    const etiquetas = { MOD: 'Mano de obra directa', MOI: 'Mano de obra indirecta', 'Gasto administrativo': 'Gasto administrativo', 'Gasto de venta': 'Gasto de venta' };
+    note.innerHTML = `<span>💡</span> Sugerido como <strong>${etiquetas[resultado.categoria]}</strong> por "${resultado.palabra}" en el cargo/área. Puedes cambiarlo si no aplica a tu caso.`;
+  } else {
+    tag.style.display = 'none';
+    note.style.display = 'flex';
+    note.innerHTML = `<span>✎</span> No se detectó un cargo conocido — selecciona la clasificación manualmente según el rol del trabajador.`;
+  }
+}
+
+// ── CLASIFICADOR DE INVENTARIO ──
+// Sugiere si un material es Directo (forma parte física del producto) o
+// Indirecto (necesario para producir pero no identificable en cada unidad).
+const INVENTARIO_KEYWORDS = {
+  Directo: [
+    'madera', 'tela', 'cuero', 'metal', 'acero', 'aluminio', 'hierro',
+    'plastico', 'plástico', 'harina', 'azucar', 'azúcar', 'tela de algodon',
+    'tela de algodón', 'hilo', 'tabla', 'lamina', 'lámina', 'vidrio',
+    'cemento', 'arena', 'piedra', 'cuero sintetico', 'cuero sintético',
+    'resina', 'tornillo estructural', 'materia prima principal'
+  ],
+  Indirecto: [
+    'tornillo', 'pegamento', 'clavo', 'clavos', 'lija', 'pintura', 'barniz',
+    'cinta adhesiva', 'grasa', 'lubricante', 'aceite', 'guantes',
+    'mascarilla', 'detergente', 'desinfectante', 'estopa', 'trapo',
+    'broca', 'lubricante industrial', 'cinta metrica', 'cinta métrica',
+    'repuesto', 'repuestos', 'filtro', 'empaque (insumo menor)'
+  ]
+};
+
+function sugerirClasifInventario() {
+  const texto = document.getElementById('inv-nombre').value.trim();
+  const tag  = document.getElementById('inv-sugerencia-tag');
+  const note = document.getElementById('inv-suggestion-note');
+
+  if (!texto) {
+    tag.style.display = 'none';
+    note.style.display = 'none';
+    return;
+  }
+
+  const resultado = matchKeyword(texto, INVENTARIO_KEYWORDS);
+
+  if (resultado) {
+    document.getElementById('inv-tipo').value = resultado.categoria;
+    tag.style.display = 'inline';
+    note.style.display = 'flex';
+    note.innerHTML = `<span>💡</span> Sugerido como <strong>Material ${resultado.categoria.toLowerCase()}</strong> por "${resultado.palabra}". Puedes cambiarlo si no aplica a tu caso.`;
+  } else {
+    tag.style.display = 'none';
+    note.style.display = 'flex';
+    note.innerHTML = `<span>✎</span> No se detectó una palabra clave conocida — selecciona el tipo manualmente según si el material forma parte física del producto (directo) o no (indirecto).`;
   }
 }
 
@@ -1165,15 +1354,30 @@ function cargarEjemplo() {
   // Nómina
   state.trabajadores = [
     { id: 1, nombre: 'Juan Pérez', cargo: 'Operario', area: 'Producción', clasif: 'MOD',
-      salario: 12000, antiguedad: 500, bonos: 0, jornada: 8, he: 10,
-      valorHoraOrd: 50, pagoHE: 1000, bruto: 13500, inss: 945, ir: 0, otras: 130,
-      deducciones: 1075, neto: 12425,
-      inssPatronal: 2902.5, inssPatronalPct: 0.215, inatec: 270, vacaciones: 1124.55, aguinaldo: 1124.55 },
+      salario: 12000, fechaIngreso: '2024-06-01', antiguedad: 0, aniosServicio: 1, pctAntiguedad: 0, bonos: 0, jornada: 8, he: 10,
+      valorHoraOrd: 50, pagoHE: 1000, bruto: 13000, inss: 910, ir: 563.5, otras: 130,
+      deducciones: 1603.5, neto: 11396.5,
+      inssPatronal: 2795, inssPatronalPct: 0.215, inatec: 260, vacaciones: 1082.9, aguinaldo: 1082.9 },
     { id: 2, nombre: 'Ana Ruiz', cargo: 'Supervisora', area: 'Producción', clasif: 'MOI',
-      salario: 8000, antiguedad: 0, bonos: 0, jornada: 8, he: 0,
+      salario: 8000, fechaIngreso: '2024-06-01', antiguedad: 0, aniosServicio: 1, pctAntiguedad: 0, bonos: 0, jornada: 8, he: 0,
       valorHoraOrd: 33.33, pagoHE: 0, bruto: 8000, inss: 560, ir: 0, otras: 80,
       deducciones: 640, neto: 7360,
-      inssPatronal: 1720, inssPatronalPct: 0.215, inatec: 160, vacaciones: 666.4, aguinaldo: 666.4 }
+      inssPatronal: 1720, inssPatronalPct: 0.215, inatec: 160, vacaciones: 666.4, aguinaldo: 666.4 },
+    { id: 3, nombre: 'Carlos Mendoza', cargo: 'Contador', area: 'Administración', clasif: 'Gasto administrativo',
+      salario: 10000, fechaIngreso: '2020-06-01', antiguedad: 500, aniosServicio: 6, pctAntiguedad: 0.05, bonos: 0, jornada: 8, he: 0,
+      valorHoraOrd: 41.67, pagoHE: 0, bruto: 10500, inss: 735, ir: 214.75, otras: 100,
+      deducciones: 1049.75, neto: 9450.25,
+      inssPatronal: 2257.5, inssPatronalPct: 0.215, inatec: 210, vacaciones: 874.65, aguinaldo: 874.65 },
+    { id: 4, nombre: 'María González', cargo: 'Vendedora', area: 'Ventas', clasif: 'Gasto de venta',
+      salario: 9000, fechaIngreso: '2014-06-01', antiguedad: 720, aniosServicio: 12, pctAntiguedad: 0.08, bonos: 0, jornada: 8, he: 0,
+      valorHoraOrd: 37.5, pagoHE: 0, bruto: 9720, inss: 680.4, ir: 105.94, otras: 90,
+      deducciones: 876.34, neto: 8843.66,
+      inssPatronal: 2089.8, inssPatronalPct: 0.215, inatec: 194.4, vacaciones: 809.68, aguinaldo: 809.68 },
+    { id: 5, nombre: 'Pedro López', cargo: 'Auxiliar administrativo', area: 'Administración', clasif: 'Gasto administrativo',
+      salario: 7000, fechaIngreso: '2004-06-01', antiguedad: 1050, aniosServicio: 22, pctAntiguedad: 0.15, bonos: 0, jornada: 8, he: 0,
+      valorHoraOrd: 29.17, pagoHE: 0, bruto: 8050, inss: 563.5, ir: 0, otras: 70,
+      deducciones: 633.5, neto: 7416.5,
+      inssPatronal: 1730.75, inssPatronalPct: 0.215, inatec: 161, vacaciones: 670.56, aguinaldo: 670.56 }
   ];
 
   // CIF
@@ -1314,30 +1518,92 @@ function calcPeps(lotes) {
 }
 
 // ══════════════════════════════════════════
-// EXPORTACIÓN A EXCEL (SheetJS)
+// EXPORTACIÓN A EXCEL (xlsx-js-style)
 // ══════════════════════════════════════════
 
 function xlsxNum(n) { return parseFloat(n) || 0; }
 
-// Estilos base reutilizables
-const XS = {
-  header: { font: { bold: true, color: { rgb: 'FFFFFF' }, sz: 11 }, fill: { fgColor: { rgb: '1A2A1C' } }, alignment: { horizontal: 'center' }, border: { bottom: { style: 'thin', color: { rgb: '4ECB8D' } } } },
-  subheader: { font: { bold: true, sz: 10 }, fill: { fgColor: { rgb: '151C16' } }, alignment: { horizontal: 'left' } },
-  total: { font: { bold: true, sz: 11, color: { rgb: '4ECB8D' } }, fill: { fgColor: { rgb: '151C16' } } },
-  empresa: { font: { bold: true, sz: 13 }, fill: { fgColor: { rgb: '0C0F0D' } }, alignment: { horizontal: 'left' } },
-  num: { numFmt: '"C$"#,##0' },
-  numBold: { font: { bold: true }, numFmt: '"C$"#,##0' },
+// ── PALETA Y ESTILOS BASE ──
+const XC = {
+  bg:       'FFFFFF',
+  headerBg: '1F6B47',   // verde oscuro para encabezados
+  headerTx: 'FFFFFF',
+  titleBg:  '0C0F0D',   // casi negro para títulos de empresa/reporte
+  titleTx:  'FFFFFF',
+  subBg:    'E8F3EC',   // verde muy claro para subtítulos de sección
+  subTx:    '1F6B47',
+  totalBg:  'D7EDE0',   // verde claro para filas de total
+  totalTx:  '0C0F0D',
+  grandBg:  '1F6B47',   // verde oscuro para el gran total
+  grandTx:  'FFFFFF',
+  border:   'B7D8C7',
+  text:     '1A1A1A',
+  warnBg:   'FCE8D6',
+  warnTx:   '8A4B14'
 };
 
-function applyStyles(ws, styleMap) {
-  Object.entries(styleMap).forEach(([cell, style]) => {
-    if (!ws[cell]) return;
-    ws[cell].s = style;
+const THIN_BORDER = { style: 'thin', color: { rgb: XC.border } };
+const ALL_BORDERS = { top: THIN_BORDER, bottom: THIN_BORDER, left: THIN_BORDER, right: THIN_BORDER };
+
+function cellTitle(text) {
+  return { v: text, t: 's', s: { font: { bold: true, sz: 14, color: { rgb: XC.titleTx } }, fill: { patternType: 'solid', fgColor: { rgb: XC.titleBg } }, alignment: { horizontal: 'left', vertical: 'center' } } };
+}
+function cellSubtitle(text) {
+  return { v: text, t: 's', s: { font: { italic: true, sz: 10, color: { rgb: 'FFFFFF' } }, fill: { patternType: 'solid', fgColor: { rgb: XC.titleBg } }, alignment: { horizontal: 'left', vertical: 'center' } } };
+}
+function cellSection(text) {
+  return { v: text, t: 's', s: { font: { bold: true, sz: 11, color: { rgb: XC.subTx } }, fill: { patternType: 'solid', fgColor: { rgb: XC.subBg } }, alignment: { horizontal: 'left', vertical: 'center' }, border: ALL_BORDERS } };
+}
+function cellHeader(text, align) {
+  return { v: text, t: 's', s: { font: { bold: true, sz: 10, color: { rgb: XC.headerTx } }, fill: { patternType: 'solid', fgColor: { rgb: XC.headerBg } }, alignment: { horizontal: align || 'center', vertical: 'center', wrapText: true }, border: ALL_BORDERS } };
+}
+function cellText(text, opts) {
+  opts = opts || {};
+  return { v: text, t: 's', s: { font: { bold: !!opts.bold, sz: 10, color: { rgb: opts.color || XC.text } }, alignment: { horizontal: opts.align || 'left', vertical: 'center' }, fill: opts.fill ? { patternType: 'solid', fgColor: { rgb: opts.fill } } : undefined, border: ALL_BORDERS } };
+}
+function cellNum(num, opts) {
+  opts = opts || {};
+  return { v: xlsxNum(num), t: 'n', s: { font: { bold: !!opts.bold, sz: 10, color: { rgb: opts.color || XC.text } }, numFmt: opts.numFmt || '"C$"#,##0.00', alignment: { horizontal: 'right', vertical: 'center' }, fill: opts.fill ? { patternType: 'solid', fgColor: { rgb: opts.fill } } : undefined, border: ALL_BORDERS } };
+}
+function cellPct(num, opts) {
+  opts = opts || {};
+  return { v: xlsxNum(num), t: 'n', s: { font: { bold: !!opts.bold, sz: 10, color: { rgb: opts.color || XC.text } }, numFmt: '0.0%', alignment: { horizontal: 'right', vertical: 'center' }, fill: opts.fill ? { patternType: 'solid', fgColor: { rgb: opts.fill } } : undefined, border: ALL_BORDERS } };
+}
+function cellTotalLabel(text, span) {
+  return { v: text, t: 's', s: { font: { bold: true, sz: 10, color: { rgb: XC.totalTx } }, fill: { patternType: 'solid', fgColor: { rgb: XC.totalBg } }, alignment: { horizontal: 'right', vertical: 'center' }, border: ALL_BORDERS } };
+}
+function cellTotalNum(num, numFmt) {
+  return { v: xlsxNum(num), t: 'n', s: { font: { bold: true, sz: 10, color: { rgb: XC.totalTx } }, fill: { patternType: 'solid', fgColor: { rgb: XC.totalBg } }, numFmt: numFmt || '"C$"#,##0.00', alignment: { horizontal: 'right', vertical: 'center' }, border: ALL_BORDERS } };
+}
+function cellGrandLabel(text) {
+  return { v: text, t: 's', s: { font: { bold: true, sz: 12, color: { rgb: XC.grandTx } }, fill: { patternType: 'solid', fgColor: { rgb: XC.grandBg } }, alignment: { horizontal: 'right', vertical: 'center' } } };
+}
+function cellGrandNum(num, numFmt) {
+  return { v: xlsxNum(num), t: 'n', s: { font: { bold: true, sz: 13, color: { rgb: XC.grandTx } }, fill: { patternType: 'solid', fgColor: { rgb: XC.grandBg } }, numFmt: numFmt || '"C$"#,##0.00', alignment: { horizontal: 'right', vertical: 'center' } } };
+}
+function emptyCell() { return { v: '', t: 's' }; }
+
+// Construye una hoja a partir de una matriz de filas (cada celda ya viene con su estilo
+// armado por los helpers cellXxx). Aplica anchos de columna automáticamente.
+function buildSheet(rows, colWidths) {
+  const ws = {};
+  let maxCol = 0;
+  rows.forEach((row, r) => {
+    row.forEach((cell, c) => {
+      if (cell === null || cell === undefined) return;
+      const addr = XLSX.utils.encode_cell({ r, c });
+      ws[addr] = cell;
+      if (c > maxCol) maxCol = c;
+    });
   });
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: Math.max(rows.length - 1, 0), c: maxCol } });
+  if (colWidths) ws['!cols'] = colWidths.map(w => ({ wch: w }));
+  return ws;
 }
 
-function setColWidths(ws, widths) {
-  ws['!cols'] = widths.map(w => ({ wch: w }));
+function mergeRange(ws, r1, c1, r2, c2) {
+  if (!ws['!merges']) ws['!merges'] = [];
+  ws['!merges'].push({ s: { r: r1, c: c1 }, e: { r: r2, c: c2 } });
 }
 
 // ── EXPORTAR INVENTARIO ──
@@ -1348,39 +1614,73 @@ function exportInventario() {
   const wb = XLSX.utils.book_new();
 
   // Hoja 1: Inventario general
-  const rows = [
-    [empresa],
-    ['MÓDULO DE INVENTARIO — MATERIALES'],
-    [],
-    ['Código', 'Material', 'Tipo', 'Unidad', 'Cant. disponible', 'Cant. consumida', 'Costo unitario', 'Costo total'],
-  ];
+  const rows = [];
+  rows.push([cellTitle(empresa), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell()]);
+  rows.push([cellSubtitle('Módulo de inventario — Materiales directos e indirectos'), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell()]);
+  rows.push([]);
+  rows.push([
+    cellHeader('Código'), cellHeader('Material', 'left'), cellHeader('Tipo'), cellHeader('Unidad'),
+    cellHeader('Cant. disponible'), cellHeader('Cant. consumida'), cellHeader('Costo unitario'), cellHeader('Costo total')
+  ]);
+
   state.materiales.forEach(m => {
-    rows.push([m.codigo || '—', m.nombre, m.tipo, m.unidad, xlsxNum(m.disponible), xlsxNum(m.cantidad), xlsxNum(m.costoUnit), xlsxNum(m.total)]);
+    const tipoColor = m.tipo === 'Directo' ? '2563EB' : 'C2622E';
+    rows.push([
+      cellText(m.codigo || '—'),
+      cellText(m.nombre),
+      cellText(m.tipo, { bold: true, color: tipoColor }),
+      cellText(m.unidad || '—'),
+      cellNum(m.disponible, { numFmt: '#,##0.00' }),
+      cellNum(m.cantidad, { numFmt: '#,##0.00' }),
+      cellNum(m.costoUnit),
+      cellNum(m.total, { bold: true })
+    ]);
   });
+
   const md = state.materiales.filter(x => x.tipo === 'Directo').reduce((a, x) => a + x.total, 0);
   const mi = state.materiales.filter(x => x.tipo === 'Indirecto').reduce((a, x) => a + x.total, 0);
-  rows.push([], ['', '', '', '', '', 'Total MD', '', xlsxNum(md)], ['', '', '', '', '', 'Total MI', '', xlsxNum(mi)], ['', '', '', '', '', 'TOTAL', '', xlsxNum(md + mi)]);
 
-  const ws1 = XLSX.utils.aoa_to_sheet(rows);
-  ws1['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:7} }, { s:{r:1,c:0}, e:{r:1,c:7} }];
-  setColWidths(ws1, [10, 28, 12, 10, 16, 16, 16, 14]);
+  rows.push([]);
+  rows.push([emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), cellTotalLabel('Total material directo (MD)'), emptyCell(), cellTotalNum(md)]);
+  rows.push([emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), cellTotalLabel('Total material indirecto (MI)'), emptyCell(), cellTotalNum(mi)]);
+  rows.push([emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), cellGrandLabel('TOTAL INVENTARIO'), emptyCell(), cellGrandNum(md + mi)]);
+
+  const ws1 = buildSheet(rows, [12, 30, 14, 10, 16, 16, 16, 16]);
+  mergeRange(ws1, 0, 0, 0, 7);
+  mergeRange(ws1, 1, 0, 1, 7);
+  ws1['!rows'] = [{ hpt: 22 }, { hpt: 16 }];
   XLSX.utils.book_append_sheet(wb, ws1, 'Inventario');
 
   // Hoja 2: PEPS por material (solo los que tienen lotes)
   const conPeps = state.materiales.filter(m => m.pepsLotes && m.pepsLotes.length > 0);
   if (conPeps.length > 0) {
-    const rowsPeps = [['TARJETAS PEPS POR MATERIAL'], []];
+    const rowsPeps = [];
+    rowsPeps.push([cellTitle(empresa), emptyCell(), emptyCell(), emptyCell(), emptyCell()]);
+    rowsPeps.push([cellSubtitle('Tarjetas PEPS por material'), emptyCell(), emptyCell(), emptyCell(), emptyCell()]);
+    rowsPeps.push([]);
+
     conPeps.forEach(m => {
       const calc = calcPeps(m.pepsLotes);
-      rowsPeps.push([`Material: ${m.nombre} (${m.codigo || '—'})`]);
-      rowsPeps.push(['Fecha', 'Tipo', 'Cantidad', 'Costo unit.', 'Total']);
-      calc.rows.forEach(r => rowsPeps.push([r.fecha, r.tipo, xlsxNum(r.cant), xlsxNum(r.costo), xlsxNum(r.total)]));
-      rowsPeps.push(['', 'Saldo existencia', xlsxNum(calc.saldoCant), '', xlsxNum(calc.saldoCosto)]);
-      rowsPeps.push(['', 'COSTO USADO (PEPS)', '', '', xlsxNum(calc.costoUsado)]);
+      rowsPeps.push([cellSection(`Material: ${m.nombre} (${m.codigo || '—'})`), emptyCell(), emptyCell(), emptyCell(), emptyCell()]);
+      rowsPeps.push([cellHeader('Fecha'), cellHeader('Tipo'), cellHeader('Cantidad'), cellHeader('Costo unit.'), cellHeader('Total')]);
+      calc.rows.forEach(r => {
+        const tipoColor = r.tipo === 'Entrada' ? '15803D' : 'C2622E';
+        rowsPeps.push([
+          cellText(r.fecha),
+          cellText(r.tipo, { bold: true, color: tipoColor }),
+          cellNum(r.cant, { numFmt: '#,##0.00' }),
+          cellNum(r.costo),
+          cellNum(r.total, { bold: true })
+        ]);
+      });
+      rowsPeps.push([emptyCell(), cellTotalLabel('Saldo en existencia'), cellTotalNum(calc.saldoCant, '#,##0.00'), emptyCell(), cellTotalNum(calc.saldoCosto)]);
+      rowsPeps.push([emptyCell(), cellGrandLabel('COSTO USADO (PEPS)'), emptyCell(), emptyCell(), cellGrandNum(calc.costoUsado)]);
       rowsPeps.push([]);
     });
-    const ws2 = XLSX.utils.aoa_to_sheet(rowsPeps);
-    setColWidths(ws2, [14, 18, 14, 14, 14]);
+
+    const ws2 = buildSheet(rowsPeps, [14, 18, 14, 14, 14]);
+    mergeRange(ws2, 0, 0, 0, 4);
+    mergeRange(ws2, 1, 0, 1, 4);
     XLSX.utils.book_append_sheet(wb, ws2, 'PEPS');
   }
 
@@ -1396,15 +1696,36 @@ function exportNomina() {
   const wb = XLSX.utils.book_new();
 
   // ── Hoja 1: Tabla de nómina general ──
-  const rows = [
-    [empresa],
-    ['MÓDULO DE NÓMINA — TABLA DE NÓMINA GENERAL'],
-    [],
-    ['Nombre', 'Cargo', 'Salario base', 'Antigüedad', 'Bonos', 'Horas extra (pago)', 'Ingresos brutos', 'INSS laboral', 'IR laboral', 'Otras ded.', 'Total deducciones', 'Salario neto', 'Clasificación'],
-  ];
+  const rows = [];
+  rows.push([cellTitle(empresa), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell()]);
+  rows.push([cellSubtitle('Módulo de nómina — Tabla de nómina general'), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell()]);
+  rows.push([]);
+  rows.push([
+    cellHeader('Nombre', 'left'), cellHeader('Cargo', 'left'), cellHeader('Salario base'), cellHeader('Antigüedad'),
+    cellHeader('Bonos'), cellHeader('Horas extra (pago)'), cellHeader('Ingresos brutos'), cellHeader('INSS laboral'),
+    cellHeader('IR laboral'), cellHeader('Otras ded.'), cellHeader('Total deducciones'), cellHeader('Salario neto'), cellHeader('Clasificación')
+  ]);
+
+  const clasifColor = { MOD: '15803D', MOI: 'C2622E', 'Gasto administrativo': '525252', 'Gasto de venta': '7C3AED' };
+
   state.trabajadores.forEach(t => {
-    rows.push([t.nombre, t.cargo, xlsxNum(t.salario), xlsxNum(t.antiguedad), xlsxNum(t.bonos), xlsxNum(t.pagoHE), xlsxNum(t.bruto), xlsxNum(t.inss), xlsxNum(t.ir), xlsxNum(t.otras), xlsxNum(t.deducciones), xlsxNum(t.neto), t.clasif]);
+    rows.push([
+      cellText(t.nombre),
+      cellText(t.cargo || '—'),
+      cellNum(t.salario),
+      cellNum(t.antiguedad),
+      cellNum(t.bonos),
+      cellNum(t.pagoHE),
+      cellNum(t.bruto, { bold: true }),
+      cellNum(t.inss),
+      cellNum(t.ir),
+      cellNum(t.otras),
+      cellNum(t.deducciones),
+      cellNum(t.neto, { bold: true }),
+      cellText(t.clasif, { bold: true, color: clasifColor[t.clasif] || XC.text })
+    ]);
   });
+
   const mod = state.trabajadores.filter(t => t.clasif === 'MOD').reduce((a, t) => a + t.bruto, 0);
   const moi = state.trabajadores.filter(t => t.clasif === 'MOI').reduce((a, t) => a + t.bruto, 0);
   const totBruto = state.trabajadores.reduce((a, t) => a + t.bruto, 0);
@@ -1412,13 +1733,15 @@ function exportNomina() {
   const totIr    = state.trabajadores.reduce((a, t) => a + t.ir, 0);
   const totDeduc = state.trabajadores.reduce((a, t) => a + t.deducciones, 0);
   const totNeto  = state.trabajadores.reduce((a, t) => a + t.neto, 0);
-  rows.push([], ['', '', '', '', '', 'TOTALES', xlsxNum(totBruto), xlsxNum(totInss), xlsxNum(totIr), '', xlsxNum(totDeduc), xlsxNum(totNeto), '']);
-  rows.push(['', '', '', '', '', '', '', '', '', '', 'Total MOD (bruto)', xlsxNum(mod), '']);
-  rows.push(['', '', '', '', '', '', '', '', '', '', 'Total MOI (bruto)', xlsxNum(moi), '']);
 
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:12} }, { s:{r:1,c:0}, e:{r:1,c:12} }];
-  setColWidths(ws, [22, 16, 12, 12, 10, 14, 14, 12, 12, 10, 16, 12, 18]);
+  rows.push([]);
+  rows.push([emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), cellTotalLabel('TOTALES'), cellTotalNum(totBruto), cellTotalNum(totInss), cellTotalNum(totIr), emptyCell(), cellTotalNum(totDeduc), cellTotalNum(totNeto), emptyCell()]);
+  rows.push([emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), cellTotalLabel('Total MOD (bruto)'), cellTotalNum(mod), emptyCell()]);
+  rows.push([emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), cellTotalLabel('Total MOI (bruto)'), cellTotalNum(moi), emptyCell()]);
+
+  const ws = buildSheet(rows, [22, 18, 13, 12, 10, 14, 14, 12, 12, 11, 16, 13, 18]);
+  mergeRange(ws, 0, 0, 0, 12);
+  mergeRange(ws, 1, 0, 1, 12);
   XLSX.utils.book_append_sheet(wb, ws, 'Nómina');
 
   // ── Hoja 2: Resumen de obligaciones patronales ──
@@ -1428,26 +1751,26 @@ function exportNomina() {
   const totAguinaldo   = state.trabajadores.reduce((a, t) => a + t.aguinaldo, 0);
   const totCargaPat    = totInssPat + totInatec;
   const totProvisiones = totVacaciones + totAguinaldo;
+  const tasaPatronalProm = totBruto > 0 ? totInssPat / totBruto : 0.215;
 
-  const rowsPat = [
-    [empresa],
-    ['CUADRO RESUMEN DE OBLIGACIONES PATRONALES'],
-    [],
-    ['Concepto', 'Base de cálculo', '% aplicado', 'Total a pagar'],
-    ['INSS Patronal', xlsxNum(totBruto), 0.225, xlsxNum(totInssPat)],
-    ['INATEC', xlsxNum(totBruto), 0.02, xlsxNum(totInatec)],
-    ['Total cargas patronales', '', '', xlsxNum(totCargaPat)],
-    [],
-    ['Provisión Vacaciones', xlsxNum(totBruto), 0.0833, xlsxNum(totVacaciones)],
-    ['Provisión Treceavo mes (Aguinaldo)', xlsxNum(totBruto), 0.0833, xlsxNum(totAguinaldo)],
-    ['Total provisiones / prestaciones sociales', '', '', xlsxNum(totProvisiones)],
-    [],
-    ['COSTO LABORAL TOTAL (Bruto + cargas + provisiones)', '', '', xlsxNum(totBruto + totCargaPat + totProvisiones)],
-  ];
-  const wsPat = XLSX.utils.aoa_to_sheet(rowsPat);
-  wsPat['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:3} }, { s:{r:1,c:0}, e:{r:1,c:3} }];
-  ['C5','C6','C9','C10'].forEach(cell => { if (wsPat[cell]) wsPat[cell].z = '0.0%'; });
-  setColWidths(wsPat, [42, 16, 12, 16]);
+  const rowsPat = [];
+  rowsPat.push([cellTitle(empresa), emptyCell(), emptyCell(), emptyCell()]);
+  rowsPat.push([cellSubtitle('Cuadro resumen de obligaciones patronales'), emptyCell(), emptyCell(), emptyCell()]);
+  rowsPat.push([]);
+  rowsPat.push([cellHeader('Concepto', 'left'), cellHeader('Base de cálculo'), cellHeader('% aplicado'), cellHeader('Total a pagar')]);
+  rowsPat.push([cellText('INSS Patronal'), cellNum(totBruto), cellPct(tasaPatronalProm), cellNum(totInssPat, { bold: true })]);
+  rowsPat.push([cellText('INATEC'), cellNum(totBruto), cellPct(0.02), cellNum(totInatec, { bold: true })]);
+  rowsPat.push([emptyCell(), emptyCell(), cellTotalLabel('Total cargas patronales'), cellTotalNum(totCargaPat)]);
+  rowsPat.push([]);
+  rowsPat.push([cellText('Provisión Vacaciones'), cellNum(totBruto), cellPct(0.0833), cellNum(totVacaciones, { bold: true })]);
+  rowsPat.push([cellText('Provisión Treceavo mes (Aguinaldo)'), cellNum(totBruto), cellPct(0.0833), cellNum(totAguinaldo, { bold: true })]);
+  rowsPat.push([emptyCell(), emptyCell(), cellTotalLabel('Total provisiones / prestaciones sociales'), cellTotalNum(totProvisiones)]);
+  rowsPat.push([]);
+  rowsPat.push([emptyCell(), emptyCell(), cellGrandLabel('COSTO LABORAL TOTAL (Bruto + cargas + provisiones)'), cellGrandNum(totBruto + totCargaPat + totProvisiones)]);
+
+  const wsPat = buildSheet(rowsPat, [44, 18, 16, 18]);
+  mergeRange(wsPat, 0, 0, 0, 3);
+  mergeRange(wsPat, 1, 0, 1, 3);
   XLSX.utils.book_append_sheet(wb, wsPat, 'Obligaciones patronales');
 
   // ── Hoja 3: Distribución contable / asiento de diario ──
@@ -1471,52 +1794,55 @@ function exportNomina() {
   };
   const totOtras = state.trabajadores.reduce((a, t) => a + t.otras, 0);
 
-  const rowsAsiento = [
-    [empresa],
-    ['DISTRIBUCIÓN CONTABLE — ASIENTO DE DIARIO (PLANILLA)'],
-    [],
-    ['Cuenta', 'Debe', 'Haber'],
-  ];
+  const rowsAsiento = [];
+  rowsAsiento.push([cellTitle(empresa), emptyCell(), emptyCell()]);
+  rowsAsiento.push([cellSubtitle('Distribución contable — Asiento de diario (planilla)'), emptyCell(), emptyCell()]);
+  rowsAsiento.push([]);
+  rowsAsiento.push([cellHeader('Cuenta', 'left'), cellHeader('Debe'), cellHeader('Haber')]);
+
   let totalDebe = 0, totalHaber = 0;
   Object.keys(porDepto).forEach(d => {
     const v = porDepto[d];
     if (v.bruto <= 0) return;
-    rowsAsiento.push([cuentaGasto[d] || d, xlsxNum(v.bruto), '']);
+    rowsAsiento.push([cellText(cuentaGasto[d] || d), cellNum(v.bruto), emptyCell()]);
     totalDebe += v.bruto;
   });
   Object.keys(porDepto).forEach(d => {
     const v = porDepto[d];
     const carga = v.inssPatronal + v.inatec;
     if (carga <= 0) return;
-    rowsAsiento.push([`${cuentaGasto[d] || d} — Cargas patronales (INSS 22.5% + INATEC 2%)`, xlsxNum(carga), '']);
+    rowsAsiento.push([cellText(`${cuentaGasto[d] || d} — Cargas patronales (INSS + INATEC)`), cellNum(carga), emptyCell()]);
     totalDebe += carga;
   });
   Object.keys(porDepto).forEach(d => {
     const v = porDepto[d];
     const prov = v.vacaciones + v.aguinaldo;
     if (prov <= 0) return;
-    rowsAsiento.push([`${cuentaGasto[d] || d} — Provisión vacaciones y treceavo mes`, xlsxNum(prov), '']);
+    rowsAsiento.push([cellText(`${cuentaGasto[d] || d} — Provisión vacaciones y treceavo mes`), cellNum(prov), emptyCell()]);
     totalDebe += prov;
   });
+
   const haberRows = [
     ['Salarios por pagar (neto a empleados)', totNeto],
-    ['INSS por pagar (laboral 7% + patronal 22.5%)', totInss + totInssPat],
+    ['INSS por pagar (laboral + patronal)', totInss + totInssPat],
     ['IR por pagar (retención laboral)', totIr],
-    ['INATEC por pagar (2%)', totInatec],
+    ['INATEC por pagar', totInatec],
     ['Vacaciones por pagar (provisión)', totVacaciones],
     ['Aguinaldo / Treceavo mes por pagar (provisión)', totAguinaldo]
   ];
   if (totOtras > 0) haberRows.push(['Otras deducciones por pagar', totOtras]);
   haberRows.forEach(([cuenta, monto]) => {
     if (monto <= 0) return;
-    rowsAsiento.push([cuenta, '', xlsxNum(monto)]);
+    rowsAsiento.push([cellText(cuenta), emptyCell(), cellNum(monto)]);
     totalHaber += monto;
   });
-  rowsAsiento.push([], ['TOTALES', xlsxNum(totalDebe), xlsxNum(totalHaber)]);
 
-  const wsAsi = XLSX.utils.aoa_to_sheet(rowsAsiento);
-  wsAsi['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:2} }, { s:{r:1,c:0}, e:{r:1,c:2} }];
-  setColWidths(wsAsi, [50, 16, 16]);
+  rowsAsiento.push([]);
+  rowsAsiento.push([cellGrandLabel('TOTALES'), cellGrandNum(totalDebe), cellGrandNum(totalHaber)]);
+
+  const wsAsi = buildSheet(rowsAsiento, [55, 18, 18]);
+  mergeRange(wsAsi, 0, 0, 0, 2);
+  mergeRange(wsAsi, 1, 0, 1, 2);
   XLSX.utils.book_append_sheet(wb, wsAsi, 'Asiento contable');
 
   XLSX.writeFile(wb, `Nomina_${empresa.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
@@ -1530,29 +1856,54 @@ function exportCIF() {
   const moi = state.trabajadores.filter(t => t.clasif === 'MOI').reduce((a, t) => a + t.bruto, 0);
 
   const wb = XLSX.utils.book_new();
-  const rows = [
-    [empresa],
-    ['MÓDULO DE CIF — COSTOS INDIRECTOS DE FABRICACIÓN'],
-    [],
-    ['Concepto', 'Tipo de CIF', 'Comportamiento', 'Área', 'Monto (C$)', 'Observación'],
-  ];
+  const rows = [];
+  rows.push([cellTitle(empresa), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell()]);
+  rows.push([cellSubtitle('Módulo de CIF — Costos indirectos de fabricación'), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell()]);
+  rows.push([]);
+  rows.push([cellHeader('Concepto', 'left'), cellHeader('Tipo de CIF'), cellHeader('Comportamiento'), cellHeader('Área'), cellHeader('Monto (C$)'), cellHeader('Observación', 'left')]);
 
-  if (mi > 0) rows.push(['Materiales indirectos (inventario)', 'Material indirecto', 'Variable', 'Producción', xlsxNum(mi), 'Integrado desde módulo de inventario']);
-  if (moi > 0) rows.push(['Mano de obra indirecta (nómina)', 'MOI', 'Fijo', 'Producción', xlsxNum(moi), 'Integrado desde módulo de nómina']);
-  state.cifItems.forEach(c => rows.push([c.concepto, c.tipo, c.comp, c.area || '—', xlsxNum(c.monto), c.obs || '—']));
+  const compColor = { Fijo: '525252', Variable: '2563EB', Mixto: '7C3AED' };
 
+  if (mi > 0) rows.push([
+    cellText('Materiales indirectos (inventario)'), cellText('Material indirecto'),
+    cellText('Variable', { bold: true, color: compColor.Variable }), cellText('Producción'),
+    cellNum(mi, { bold: true }), cellText('Integrado desde módulo de inventario')
+  ]);
+  if (moi > 0) rows.push([
+    cellText('Mano de obra indirecta (nómina)'), cellText('MOI'),
+    cellText('Fijo', { bold: true, color: compColor.Fijo }), cellText('Producción'),
+    cellNum(moi, { bold: true }), cellText('Integrado desde módulo de nómina')
+  ]);
+  state.cifItems.forEach(c => rows.push([
+    cellText(c.concepto), cellText(c.tipo),
+    cellText(c.comp, { bold: true, color: compColor[c.comp] || XC.text }), cellText(c.area || '—'),
+    cellNum(c.monto, { bold: true }), cellText(c.obs || '—')
+  ]));
+
+  const cifFijoExtra     = state.cifItems.filter(c => c.comp === 'Fijo').reduce((a, c) => a + c.monto, 0);
+  const cifVariableExtra = state.cifItems.filter(c => c.comp === 'Variable').reduce((a, c) => a + c.monto, 0);
+  const cifMixtoExtra    = state.cifItems.filter(c => c.comp === 'Mixto').reduce((a, c) => a + c.monto, 0);
+  const totalFijo     = cifFijoExtra + moi;
+  const totalVariable = cifVariableExtra + mi;
+  const totalMixto    = cifMixtoExtra;
   const total = mi + moi + state.cifItems.reduce((a, c) => a + c.monto, 0);
-  rows.push([], ['', '', '', 'TOTAL CIF', xlsxNum(total), '']);
 
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:5} }, { s:{r:1,c:0}, e:{r:1,c:5} }];
-  setColWidths(ws, [34, 22, 14, 16, 14, 28]);
+  rows.push([]);
+  rows.push([emptyCell(), emptyCell(), emptyCell(), cellTotalLabel('Subtotal CIF Fijo'), cellTotalNum(totalFijo), emptyCell()]);
+  rows.push([emptyCell(), emptyCell(), emptyCell(), cellTotalLabel('Subtotal CIF Variable'), cellTotalNum(totalVariable), emptyCell()]);
+  if (totalMixto > 0) rows.push([emptyCell(), emptyCell(), emptyCell(), cellTotalLabel('Subtotal CIF Mixto'), cellTotalNum(totalMixto), emptyCell()]);
+  rows.push([emptyCell(), emptyCell(), emptyCell(), cellGrandLabel('TOTAL CIF'), cellGrandNum(total), emptyCell()]);
+
+  const ws = buildSheet(rows, [36, 22, 14, 18, 16, 32]);
+  mergeRange(ws, 0, 0, 0, 5);
+  mergeRange(ws, 1, 0, 1, 5);
   XLSX.utils.book_append_sheet(wb, ws, 'CIF');
 
   XLSX.writeFile(wb, `CIF_${empresa.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
   toast('CIF exportado a Excel.');
 }
 
+// ── EXPORTAR REPORTE COMPLETO ──
 // ── EXPORTAR REPORTE COMPLETO ──
 function exportReporte() {
   const empresa  = state.empresa ? state.empresa.nombre : 'Empresa';
@@ -1572,58 +1923,85 @@ function exportReporte() {
   const wb = XLSX.utils.book_new();
 
   // ── Hoja 1: Resumen ejecutivo ──
-  const rowsRes = [
-    [empresa],
-    ['REPORTE DE COSTO DE PRODUCCIÓN'],
-    [`Producto: ${producto}  |  Período: ${periodo}  |  Unidades: ${unidades}`],
-    [],
-    ['ELEMENTO DEL COSTO', 'MONTO (C$)', '% DEL TOTAL'],
-    ['Material directo consumido', xlsxNum(md), cTotal > 0 ? (md/cTotal) : 0],
-    ['Mano de obra directa (MOD)', xlsxNum(mod), cTotal > 0 ? (mod/cTotal) : 0],
-    ['Costos indirectos de fabricación (CIF)', xlsxNum(totalCIF), cTotal > 0 ? (totalCIF/cTotal) : 0],
-    [],
-    ['COSTO TOTAL DE PRODUCCIÓN', xlsxNum(cTotal), 1],
-    [],
-    ['Unidades producidas', xlsxNum(unidades), ''],
-    ['COSTO UNITARIO', xlsxNum(cUnit), ''],
-    [],
-    ['Fórmula:', `MD (${fmtNum(md)}) + MOD (${fmtNum(mod)}) + CIF (${fmtNum(totalCIF)}) = C$ ${fmtNum(cTotal)}`, ''],
-  ];
-  const wsRes = XLSX.utils.aoa_to_sheet(rowsRes);
-  wsRes['!merges'] = [{ s:{r:0,c:0}, e:{r:0,c:2} }, { s:{r:1,c:0}, e:{r:1,c:2} }, { s:{r:2,c:0}, e:{r:2,c:2} }];
-  // Formato porcentaje en columna C
-  ['C6','C7','C8','C10'].forEach(cell => { if (wsRes[cell]) wsRes[cell].z = '0.0%'; });
-  setColWidths(wsRes, [38, 18, 14]);
+  const rowsRes = [];
+  rowsRes.push([cellTitle(empresa), emptyCell(), emptyCell()]);
+  rowsRes.push([cellSubtitle('Reporte de costo de producción'), emptyCell(), emptyCell()]);
+  rowsRes.push([cellSubtitle(`Producto: ${producto || '—'}  |  Período: ${periodo || '—'}  |  Unidades: ${fmtNum(unidades)}`), emptyCell(), emptyCell()]);
+  rowsRes.push([]);
+  rowsRes.push([cellHeader('Elemento del costo', 'left'), cellHeader('Monto (C$)'), cellHeader('% del total')]);
+  rowsRes.push([cellText('Material directo consumido'), cellNum(md, { bold: true }), cellPct(cTotal > 0 ? md/cTotal : 0)]);
+  rowsRes.push([cellText('Mano de obra directa (MOD)'), cellNum(mod, { bold: true }), cellPct(cTotal > 0 ? mod/cTotal : 0)]);
+  rowsRes.push([cellText('Costos indirectos de fabricación (CIF)'), cellNum(totalCIF, { bold: true }), cellPct(cTotal > 0 ? totalCIF/cTotal : 0)]);
+  rowsRes.push([]);
+  rowsRes.push([cellGrandLabel('COSTO TOTAL DE PRODUCCIÓN'), cellGrandNum(cTotal), emptyCell()]);
+  rowsRes.push([]);
+  rowsRes.push([cellText('Unidades producidas', { bold: true }), cellNum(unidades, { numFmt: '#,##0' }), emptyCell()]);
+  rowsRes.push([cellText('COSTO UNITARIO', { bold: true, color: XC.subTx, fill: XC.subBg }), cellNum(cUnit, { bold: true, fill: XC.subBg }), emptyCell()]);
+  rowsRes.push([]);
+  rowsRes.push([cellText(`Fórmula: MD (${fmtNum(md)}) + MOD (${fmtNum(mod)}) + CIF (${fmtNum(totalCIF)}) = C$ ${fmtNum(cTotal)}`, { bold: false }), emptyCell(), emptyCell()]);
+
+  const wsRes = buildSheet(rowsRes, [40, 18, 14]);
+  mergeRange(wsRes, 0, 0, 0, 2);
+  mergeRange(wsRes, 1, 0, 1, 2);
+  mergeRange(wsRes, 2, 0, 2, 2);
+  mergeRange(wsRes, 14, 0, 14, 2);
   XLSX.utils.book_append_sheet(wb, wsRes, 'Resumen');
 
   // ── Hoja 2: Desglose CIF ──
-  const rowsCIF = [
-    ['DESGLOSE DE CIF'],
-    [],
-    ['Concepto', 'Tipo', 'Comportamiento', 'Monto'],
-  ];
-  if (mi > 0)  rowsCIF.push(['Materiales indirectos (inv.)', 'Mat. indirecto', 'Variable', xlsxNum(mi)]);
-  if (moi > 0) rowsCIF.push(['Mano de obra indirecta (nom.)', 'MOI', 'Fijo', xlsxNum(moi)]);
-  state.cifItems.forEach(c => rowsCIF.push([c.concepto, c.tipo, c.comp, xlsxNum(c.monto)]));
-  rowsCIF.push([], ['', '', 'TOTAL CIF', xlsxNum(totalCIF)]);
-  const wsCIF = XLSX.utils.aoa_to_sheet(rowsCIF);
-  setColWidths(wsCIF, [34, 22, 16, 14]);
+  const compColor = { Fijo: '525252', Variable: '2563EB', Mixto: '7C3AED' };
+  const rowsCIF = [];
+  rowsCIF.push([cellTitle(empresa), emptyCell(), emptyCell(), emptyCell()]);
+  rowsCIF.push([cellSubtitle('Desglose de CIF'), emptyCell(), emptyCell(), emptyCell()]);
+  rowsCIF.push([]);
+  rowsCIF.push([cellHeader('Concepto', 'left'), cellHeader('Tipo'), cellHeader('Comportamiento'), cellHeader('Monto')]);
+  if (mi > 0)  rowsCIF.push([cellText('Materiales indirectos (inv.)'), cellText('Mat. indirecto'), cellText('Variable', { bold: true, color: compColor.Variable }), cellNum(mi, { bold: true })]);
+  if (moi > 0) rowsCIF.push([cellText('Mano de obra indirecta (nom.)'), cellText('MOI'), cellText('Fijo', { bold: true, color: compColor.Fijo }), cellNum(moi, { bold: true })]);
+  state.cifItems.forEach(c => rowsCIF.push([cellText(c.concepto), cellText(c.tipo), cellText(c.comp, { bold: true, color: compColor[c.comp] || XC.text }), cellNum(c.monto, { bold: true })]));
+  rowsCIF.push([]);
+  rowsCIF.push([emptyCell(), emptyCell(), cellGrandLabel('TOTAL CIF'), cellGrandNum(totalCIF)]);
+
+  const wsCIF = buildSheet(rowsCIF, [36, 22, 18, 16]);
+  mergeRange(wsCIF, 0, 0, 0, 3);
+  mergeRange(wsCIF, 1, 0, 1, 3);
   XLSX.utils.book_append_sheet(wb, wsCIF, 'Desglose CIF');
 
   // ── Hoja 3: Inventario ──
-  const rowsInv = [['INVENTARIO DE MATERIALES'], [], ['Código','Material','Tipo','Unidad','Cant. consumida','Costo unit.','Costo total']];
-  state.materiales.forEach(m => rowsInv.push([m.codigo||'—', m.nombre, m.tipo, m.unidad, xlsxNum(m.cantidad), xlsxNum(m.costoUnit), xlsxNum(m.total)]));
-  rowsInv.push([], ['','','','','Total MD','', xlsxNum(md)]);
-  const wsInv = XLSX.utils.aoa_to_sheet(rowsInv);
-  setColWidths(wsInv, [10,28,12,10,16,14,14]);
+  const rowsInv = [];
+  rowsInv.push([cellTitle(empresa), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell()]);
+  rowsInv.push([cellSubtitle('Inventario de materiales'), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell()]);
+  rowsInv.push([]);
+  rowsInv.push([cellHeader('Código'), cellHeader('Material', 'left'), cellHeader('Tipo'), cellHeader('Unidad'), cellHeader('Cant. consumida'), cellHeader('Costo unit.'), cellHeader('Costo total')]);
+  const tipoColor = { Directo: '2563EB', Indirecto: 'C2622E' };
+  state.materiales.forEach(m => rowsInv.push([
+    cellText(m.codigo || '—'), cellText(m.nombre), cellText(m.tipo, { bold: true, color: tipoColor[m.tipo] || XC.text }),
+    cellText(m.unidad || '—'), cellNum(m.cantidad, { numFmt: '#,##0.00' }), cellNum(m.costoUnit), cellNum(m.total, { bold: true })
+  ]));
+  rowsInv.push([]);
+  rowsInv.push([emptyCell(), emptyCell(), emptyCell(), emptyCell(), cellGrandLabel('Total MD'), emptyCell(), cellGrandNum(md)]);
+
+  const wsInv = buildSheet(rowsInv, [12, 30, 12, 10, 16, 14, 14]);
+  mergeRange(wsInv, 0, 0, 0, 6);
+  mergeRange(wsInv, 1, 0, 1, 6);
   XLSX.utils.book_append_sheet(wb, wsInv, 'Inventario');
 
   // ── Hoja 4: Nómina ──
-  const rowsNom = [['NÓMINA DE PRODUCCIÓN'], [], ['Trabajador','Cargo','Sal. bruto','Deducciones','Sal. neto','Clasificación']];
-  state.trabajadores.forEach(t => rowsNom.push([t.nombre, t.cargo, xlsxNum(t.bruto), xlsxNum(t.deducciones), xlsxNum(t.neto), t.clasif]));
-  rowsNom.push([], ['','Total MOD', xlsxNum(mod),'','',''], ['','Total MOI', xlsxNum(moi),'','','']);
-  const wsNom = XLSX.utils.aoa_to_sheet(rowsNom);
-  setColWidths(wsNom, [24,16,14,14,14,18]);
+  const clasifColor = { MOD: '15803D', MOI: 'C2622E', 'Gasto administrativo': '525252', 'Gasto de venta': '7C3AED' };
+  const rowsNom = [];
+  rowsNom.push([cellTitle(empresa), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell()]);
+  rowsNom.push([cellSubtitle('Nómina de producción'), emptyCell(), emptyCell(), emptyCell(), emptyCell(), emptyCell()]);
+  rowsNom.push([]);
+  rowsNom.push([cellHeader('Trabajador', 'left'), cellHeader('Cargo', 'left'), cellHeader('Sal. bruto'), cellHeader('Deducciones'), cellHeader('Sal. neto'), cellHeader('Clasificación')]);
+  state.trabajadores.forEach(t => rowsNom.push([
+    cellText(t.nombre), cellText(t.cargo || '—'), cellNum(t.bruto, { bold: true }),
+    cellNum(t.deducciones), cellNum(t.neto, { bold: true }), cellText(t.clasif, { bold: true, color: clasifColor[t.clasif] || XC.text })
+  ]));
+  rowsNom.push([]);
+  rowsNom.push([emptyCell(), cellTotalLabel('Total MOD'), cellTotalNum(mod), emptyCell(), emptyCell(), emptyCell()]);
+  rowsNom.push([emptyCell(), cellTotalLabel('Total MOI'), cellTotalNum(moi), emptyCell(), emptyCell(), emptyCell()]);
+
+  const wsNom = buildSheet(rowsNom, [24, 20, 14, 14, 14, 20]);
+  mergeRange(wsNom, 0, 0, 0, 5);
+  mergeRange(wsNom, 1, 0, 1, 5);
   XLSX.utils.book_append_sheet(wb, wsNom, 'Nómina');
 
   XLSX.writeFile(wb, `Reporte_Costos_${empresa.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`);
